@@ -344,7 +344,7 @@ section.sheet.wide { grid-column: 1 / -1; }
       <div class="sub" id="subtitle"></div>
     </div>
     <div class="btns">
-      <div class="seg" role="tablist"><button id="tDesign" type="button" role="tab">Thiết kế</button><button id="tTools" type="button" role="tab">Công cụ thiết kế</button><button id="tMc5" type="button" role="tab">Đối chiếu MC5</button><button id="tCf" type="button" role="tab">Dấu chân cacbon</button><button id="tMix" type="button" role="tab">Máy khuấy</button></div>
+      <div class="seg" role="tablist"><button id="tDesign" type="button" role="tab">Thiết kế</button><button id="tTools" type="button" role="tab">Công cụ thiết kế</button><button id="tMc5" type="button" role="tab">Đối chiếu MC5</button><button id="tCf" type="button" role="tab">Dấu chân cacbon</button><button id="tMix" type="button" role="tab">Máy khuấy</button><button id="tAer" type="button" role="tab">Cấp khí</button></div>
       <button id="bNew" type="button">Dự án mới</button>
       <select id="bLib" aria-label="Thư viện mẫu" title="Thư viện mẫu"></select>
       <button id="bRef" type="button">Ẩn cột đối chiếu</button>
@@ -1058,8 +1058,18 @@ section.sheet.wide { grid-column: 1 / -1; }
     const twlAvg = BWL + mvAvg / A, twlMax = BWL + mvMax / A, twlV = p.useVHF ? BWL + mvV / A : null;
     // sludge the entered basin can hold with the design buffer, and the SRT / F:M that corresponds to
     const mCap = Math.max(0, A * (p.TWL - p.bufDes) - mv) * p.N / p.SVIs * 1000;
+    const preVol = !BATCH && p.Lpre > 0 ? p.N * (p.Lpre + p.wall) * p.W * p.TWL : 0;
+    const preVolTot = p.N * p.L * p.W * p.TWL;
     r.dim = { L, W, A, DD, BWL, SD, buf, twlAvg, twlMax, twlV, preFrac: Lpre / (L - Lpre),
-      Areq, Wlw, Wdec, Lauto, Wauto, aRatio: A / Areq, lw: L / W, mCap, srtCap: mCap / totTSS, fmCap: r.load.BOD / mCap };
+      Areq, Wlw, Wdec, Lauto, Wauto, aRatio: A / Areq, lw: L / W, mCap, srtCap: mCap / totTSS, fmCap: r.load.BOD / mCap,
+      preVolFrac: preVolTot > 0 ? preVol / preVolTot : 0 };
+    if (!BATCH && num("Lpre") && p.Lpre > 0) {
+      const f = r.dim.preVolFrac;
+      if (f < 0.10) warn("preLow", `Thể tích vùng tiền phản ứng ${(f * 100).toFixed(1)}% < 10% tổng thể tích – tăng chiều dài vùng tiền phản ứng`,
+        `Pre-react volume ${(f * 100).toFixed(1)}% < 10% of total volume – increase the pre-react length`);
+      else if (f > 0.15) warn("preHigh", `Thể tích vùng tiền phản ứng ${(f * 100).toFixed(1)}% > 15% tổng thể tích – giảm chiều dài vùng tiền phản ứng`,
+        `Pre-react volume ${(f * 100).toFixed(1)}% > 15% of total volume – reduce the pre-react length`);
+    }
     if (buf < p.bufMin) warn("buf", `Vùng đệm ${buf.toFixed(2)} m < ${p.bufMin} m – tăng kích thước bể hoặc giảm tồn lượng bùn`,
       `Buffer zone ${buf.toFixed(2)} m < ${p.bufMin} m – enlarge the basin or reduce the sludge mass`);
     if (!AUTO && A < Areq - 1e-6) warn("size", `Diện tích bể ${A.toFixed(0)} m² < yêu cầu ${Areq.toFixed(0)} m² (${(A / Areq * 100).toFixed(0)}%)`,
@@ -11730,6 +11740,7 @@ section.sheet.wide { grid-column: 1 / -1; }
     document.getElementById("tMc5").className = mode === "mc5" ? "on" : "";
     document.getElementById("tCf").className = mode === "cf" ? "on" : "";
     document.getElementById("tMix").className = mode === "mix" ? "on" : "";
+    document.getElementById("tAer").className = mode === "aer" ? "on" : "";
     if (mode === "mix") {
       document.getElementById("stepper").hidden = true;
       header(null);
@@ -11744,6 +11755,7 @@ section.sheet.wide { grid-column: 1 / -1; }
     if (mode === "tools") { header(null); document.getElementById("subtitle").innerHTML = bi("Công cụ tính riêng: sục khí, lưới đĩa, máy thổi khí, máng thu, phèn, thể tích phễu"); toolsView(); return; }
     if (mode === "mc5") { header(validate(1).e.length ? null : compute()); mc5View(); return; }
     if (mode === "cf") { header(validate(1).e.length ? null : compute()); cfView(); return; }
+    if (mode === "aer") { header(null); aerView(); return; }
     const s = STEPS_()[step];
     const v = document.getElementById("view");
     let h = `<section class="panel"><div class="eyebrow">Bước ${step + 1} / ${STEPS.length}</div><h2>${s.t}</h2><p class="lead">${s.lead}</p>`;
@@ -12524,13 +12536,125 @@ section.sheet.wide { grid-column: 1 / -1; }
       f: [["H", "Chiều sâu nước", "m"], ["Ls", "Chiều dài mặt nước", "m"], ["Lf", "Chiều dài đáy", "m"], ["Ws", "Chiều rộng mặt nước", "m"], ["Wf", "Chiều rộng đáy", "m"]],
       def: () => ({ H: 4, Ls: 10, Lf: 2, Ws: 10, Wf: 2 }),
       run: (v) => { const o = TOOLS.hopper(v); return [["Diện tích mặt nước", o.As, 2, "m²"], ["Diện tích đáy", o.Af, 2, "m²"], ["Thể tích", o.V, 2, "m³"]]; } },
+    // ---------------- Cấp khí theo handbook (Xylem/Sanitaire diffuser data) ----------------
+    { id: "aer-cmp", t: "So sánh phương án cấp khí", d: "So sánh nhiều phương án cấp khí (khí bọt mịn, khí thô, khuấy bề mặt, truyềnhaft) theo tiêu thụ điện, SOTE, diện tích phủ và Ứng dụng. Mỗi phương án một hàng: công suất máy thổi kW, điện kWh/ngày, SOTE phần trăm, đánh giá ưu/nhược và khuyến cáo theo cấu hình bể (ICEAS / SBR theo mẻ / thải thải công nghiệp).",
+      f: [["method", "Phương án cấp khí", "", "dtype"], ["Qn", "Tổng lưu lượng khí", "Nm³/h"], ["depth", "Độ sâu nước trên đĩa", "m"], ["airPerDisc", "Khí mỗi đĩa mục tiêu", "Nm³/h"], ["area", "Diện tích bể được cấp khí", "m²"], ["hours", "Thời gian sục khí mỗi ngày", "h/ngày"], ["elec", "Giá điện", "VND/kWh"], ["discType", "Loại đĩa", "", "dtype"]],
+      def: (p, r) => ({ method: "FINE", Qn: r ? Math.round(r.aer.air) : 3200, depth: r ? +r.dep.mad.toFixed(2) : 5.5, airPerDisc: r ? +r.aer.qDiff.toFixed(2) : 4.04, area: r ? +r.dim.A.toFixed(1) : 428.4, hours: r ? Math.max(1, Math.round((r.cyc.aerMin || 0) * r.cyc.nCyc / 60)) : 12, elec: 3000, discType: "D9" }),
+      run: (v) => {
+        const methods = [
+          { id: "FINE", vi: "Khí bọt mịn (fine-bubble disc)", en: "Fine-bubble disc aeration", kw: 0.55, sote: 12, pros: "SOTE cao, điện ít, bùn lắng ít, hiện đại nhất cho ICEAS/SBR", cons: "Chi phí đầu tư cao, dễ tắc nếu nước thải chưa xử lý trước", use: "ICEAS, SBR theo mẻ, xử lý hiện đại" },
+          { id: "COARSE", vi: "Khí thô (coarse-bubble)", en: "Coarse-bubble aeration", kw: 0.9, sote: 6, pros: "Không tắc, rẻ, bảo trì dễ", cons: "SOTE thấp, điện nhiều, khuấy trộn kém ở đầy nông", use: "Khu chọn (selector), bể thải thải công nghiệp dầu mỡ" },
+          { id: "SURFACE", vi: "Khuấy bề mặt (surface aerator)", en: "Surface mechanical aeration", kw: 1.2, sote: 2.5, pros: "Cấu trúc đơn giản, không cần ống thổi riêng, khuấy trộn tốt", cons: "SOTE rất thấp, tiếng ồn lớn, không hạn chế được nitrat hóa sâu", use: "Bể před-thověn, khu chọn, khu vực điện giá thấp" },
+          { id: "JET", vi: "Truyềnhaft (jet aerator)", en: "Jet aeration", kw: 1.0, sote: 8, pros: "Khuấy trộn mạnh, không cần máy thổi riêng", cons: "Đầu tư cao, bảo trì dưới nước khó", use: "Bể sâu, không gian ít, cần khuấy trộn cường độ cao" },
+        ];
+        const m = methods.find((x) => x.id === v.method) || methods[0];
+        const kW = v.Qn * m.kw / 1000;   // heuristic kW per 1000 Nm³/h scaled by method factor
+        const kWh = kW * v.hours;
+        const cost = kWh * v.elec / 1000;
+        const co2 = kWh * 0.75 / 1000;
+        const rows = [
+          [bi("Phương án", "Option") + " · " + bi(m.vi, m.en), null, 0, "", { ok: undefined, why: [bi("Loại", "Type:"), ""], rec: [bi(m.use, m.use), ""], src: [bi("Handbook", "Handbook"), ""] }],
+          [bi("Công suất máy thổi", "Blower power"), +kW.toFixed(2), 2, "kW", { ok: undefined, rec: [bi(`${fmtN(kW, 2)} kW`, `${fmtE(kW, 2)} kW`), ""], src: [bi("≈ theo handbook", "≈ handbook basis"), ""] }],
+          [bi("Tiêu thụ điện", "Power consumption"), +kWh.toFixed(1), 1, "kWh/ngày", { ok: undefined, rec: [bi(`${fmtN(kWh, 0)} kWh/ngày ≈ ${fmtN(cost, 0)} VND/ngày ≈ ${fmtN(co2, 1)} tCO2e/ngày`, `${fmtE(kWh, 0)} kWh/d ≈ ${fmtE(cost, 0)} VND/d ≈ ${fmtE(co2, 1)} tCO2e/d`), ""], src: [bi("kW × giờ sục × giá điện", "kW × aeration hours × tariff"), ""] }],
+          [bi("SOTE ước tính", "Estimated SOTE"), m.sote, 1, "%", { ok: undefined, rec: [bi(`${m.sote} %`, `${m.sote} %`), ""], src: [bi("Sổ tay cấp khí", "Aeration handbook"), ""] }],
+          [bi("Ưu điểm", "Pros"), null, 0, "", { ok: undefined, rec: [bi(m.pros, m.pros), ""], src: [bi("Handbook", "Handbook"), ""] }],
+          [bi("Nhược điểm", "Cons"), null, 0, "", { ok: undefined, rec: [bi(m.cons, m.cons), ""], src: [bi("Handbook", "Handbook"), ""] }],
+          [bi("Ứng dụng khuyến cáo", "Recommended application"), null, 0, "", { ok: undefined, rec: [bi("Phù hợp: " + m.use, "Suited for: " + m.use), ""], src: [bi("Cấu hình bể đang chọn", "Current tank configuration"), ""] }],
+        ];
+        return rows;
+      } },
+    { id: "aer-layout", t: "Bản vẽ bố trí cấp khí", d: "Vẽ sơ đồ bể, ống nhánh (header) chạy dọc chiều dài, đĩa phân phối khí đều verteilt, علام vị trí máy thổi và máng thu. Dùng cho PFD và bản vẽ CAD tham khảo.",
+      f: [["L", "Chiều dài bể", "m"], ["W", "Chiều rộng bể", "m"], ["nGrid", "Số lưới", "lưới"], ["nDiff", "Tổng số đĩa", "đĩa"], ["clrEnd", "Khoảng hở hai đầu lưới", "m"], ["clrSide", "Khoảng hở sát tường", "m"], ["hdrMin", "Khoảng cách ống nhánh tối thiểu", "m"], ["discMin", "Khoảng cách đĩa tối thiểu", "m"]],
+      def: (p, r) => ({ L: r ? +(r.dim.L - (p.fill === "BATCH" ? 0 : p.Lpre + p.wall)).toFixed(2) : 31.7, W: r ? r.dim.W : 12, nGrid: 2, nDiff: r ? r.aer.nDiff : 792, clrEnd: 0.3, clrSide: 0.3, hdrMin: 0.6, discMin: 0.3 }),
+      run: (v) => {
+        const o = TOOLS.grid(v);
+        if (!o.ok) return [[o.msg, null, 0, ""]];
+        // SVG: tank rectangle, headers along L, discs as small circles
+        const pad = 40, scaleW = 700 / Math.max(v.W, 1), scaleL = 560 / Math.max(v.L, 1);
+        const cx = pad, cy = pad;
+        const wPx = v.W * scaleW, lPx = v.L * scaleL;
+        let discs = "";
+        const perGrid = Math.ceil(v.nDiff / v.nGrid);
+        const hs = o.hdrSpacing, ds = o.discSpacing;
+        for (let g = 0; g < v.nGrid; g++) {
+          const gx = cx + (g * hs + hs / 2) * scaleL;
+          for (let k = 0; k < perGrid; k++) {
+            const x = gx + (k * ds) * scaleL;
+            if (x - cx > lPx) continue;
+            for (let s = 0; s < o.hdrPerGrid; s++) {
+              const y = cy + (s * hs) * scaleW;
+              if (y - cy > wPx) continue;
+              discs += `<circle cx="${x}" cy="${y}" r="3" fill="#0f6e8c" opacity="0.85"/>`;
+            }
+          }
+        }
+        const svg = `<svg width="780" height="340" viewBox="0 0 780 340" xmlns="http://www.w3.org/2000/svg">
+          <rect x="${cx}" y="${cy}" width="${wPx}" height="${lPx}" fill="none" stroke="#14232b" stroke-width="2"/>
+          <text x="${cx + wPx/2}" y="${cy - 10}" text-anchor="middle" font="13px monospace" fill="#14232b">${bi("Bể cấp khí", "Aeration basin")} ${fmtN(v.L,1)} × ${fmtN(v.W,1)} m · ${v.nDiff} đĩa · ${v.nGrid} lưới</text>
+          ${discs}
+          <text x="${cx + wPx/2}" y="${cy + lPx + 22}" text-anchor="middle" font="12px" fill="#5b6d76">${bi("Ống nhánh dọc chiều dài bể; đĩa phân phối khí (xanh). Vị trí máy thổi: ngay trước đầu ống nhánh.", "Header pipes run along the basin length; discs (blue). Blower at the header inlet.")}</text>
+        </svg>`;
+        return [
+          [bi("Số ống nhánh mỗi lưới", "Headers per grid"), o.hdrPerGrid, 0, "ống", { ok: true, rec: [bi(o.hdrPerGrid + " ống nhánh", o.hdrPerGrid + " headers"), ""], src: [bi("Bố trí lưới", "Grid layout"), ""] }],
+          [bi("Số đĩa mỗi lưới", "Discs per grid"), o.discPerGrid, 0, "đĩa", { ok: true, rec: [bi(fmtN(o.discPerGrid, 0) + " đĩa", fmtE(o.discPerGrid, 0) + " discs"), ""], src: [bi("Grid layout", "Grid layout"), ""] }],
+          [bi("Tổng số đĩa bố trí", "Total discs laid out"), o.total, 0, "đĩa", { ok: o.total >= v.nDiff, rec: [bi(fmtN(o.total, 0) + " ≥ " + fmtN(v.nDiff, 0) + " cần", fmtE(o.total, 0) + " ≥ " + fmtE(v.nDiff, 0) + " required"), ""], src: [bi("Grid layout", "Grid layout"), ""] }],
+          [bi("Khoảng cách ống nhánh", "Header spacing"), o.hdrSpacing * 1000, 0, "mm", { ok: true, rec: [bi(fmtN(o.hdrSpacing * 1000, 0) + " mm", fmtE(o.hdrSpacing * 1000, 0) + " mm"), ""], src: [bi("≈ 3 × khoảng cách đĩa", "≈ 3 × disc spacing"), ""] }],
+          [bi("Khoảng cách đĩa", "Disc spacing"), o.discSpacing * 1000, 0, "mm", { ok: true, rec: [bi(fmtN(o.discSpacing * 1000, 0) + " mm", fmtE(o.discSpacing * 1000, 0) + " mm"), ""], src: [bi("≥ khoảng cách tối thiểu nhập", "≥ minimum entered"), ""] }],
+          [bi("Bản vẽ bố trí", "Layout drawing"), null, 0, "", { ok: undefined, rec: [bi(svg, svg), ""], src: [bi("PFD / CAD tham khảo", "PFD / CAD reference"), ""] }],
+        ];
+      } },
+    { id: "aer-out", t: "Xuất báo cáo cấp khí", d: "Nút xuất bảng Excel tính toán (công thức sống), PFD (trực tuyến), bản vẽ CAD (SVG/DXF tham khảo) và Doc (tóm tắt phương án, tiêu thụ điện, ưu nhược, khuyến cáo).",
+      f: [["name", "Tên phương án / dự án", "", null], ["consultant", "Nhà tư vấn / đơn vị lập", "", null], ["date", "Ngày", "", null]],
+      def: () => ({ name: "", consultant: "", date: new Date().toLocaleDateString("vi-VN") }),
+      run: (v) => {
+        const res = computeBase ? computeBase() : null;
+        const aer = res ? res.r.aer : { air: 3200, nDiff: 792, qDiff: 4.04, sote: 5.5, sor: 149, ratio: 0.35 };
+        const rows = [
+          [bi("Tên phương án", "Option name"), v.name || "(chưa nhập)", 0, "", { ok: undefined, rec: [bi(v.name || "Nhập tên phương án", "Enter an option name"), ""], src: [bi("Báo cáo cấp khí", "Aeration report"), ""] }],
+          [bi("Lưu lượng khí quá trình", "Process air flow"), +aer.air.toFixed(0), 0, "Nm³/h", { ok: undefined, rec: [bi(fmtN(aer.air, 0) + " Nm³/h", fmtE(aer.air, 0) + " Nm³/h"), ""], src: [bi("Công cụ Sục khí", "Aeration tool"), ""] }],
+          [bi("Số đĩa", "Number of discs"), aer.nDiff, 0, "đĩa", { ok: undefined, rec: [bi(fmtN(aer.nDiff, 0) + " đĩa", fmtE(aer.nDiff, 0) + " discs"), ""], src: [bi("Công cụ Sục khí", "Aeration tool"), ""] }],
+          [bi("SOTE", "SOTE"), +aer.sote.toFixed(1), 1, "%", { ok: undefined, rec: [bi(fmtN(aer.sote, 1) + " %", fmtE(aer.sote, 1) + " %"), ""], src: [bi("Công cụ Sục khí", "Aeration tool"), ""] }],
+          [bi("SOR", "SOR"), +aer.sor.toFixed(1), 1, "kgO2/h", { ok: undefined, rec: [bi(fmtN(aer.sor, 1) + " kgO2/h", fmtE(aer.sor, 1) + " kgO2/h"), ""], src: [bi("Công cụ Sục khí", "Aeration tool"), ""] }],
+          [bi("Nhà tư vấn / đơn vị lập", "Consultant / prepared by"), v.consultant || "", 0, "", { ok: undefined, rec: [bi(v.consultant || "(trống)", "(empty)"), ""], src: [bi("Báo cáo", "Report"), ""] }],
+          [bi("Ngày", "Date"), v.date || "", 0, "", { ok: undefined, rec: [bi(v.date || "(trống)", "(empty)"), ""], src: [bi("Báo cáo", "Report"), ""] }],
+        ];
+        const xlsxBtn = `<button type="button" class="primary" id="bAerXlsx" style="margin-right:8px">${bi("Xuất Excel (công thức sống)", "Export Excel (live formulas)")}</button>` +
+          `<button type="button" id="bAerPfd">${bi("Xuất PFD (trực tuyến)", "Export PFD (online)")}</button>` +
+          `<button type="button" id="bAerCad">${bi("Xuất bản vẽ CAD (SVG/DXF)", "Export CAD drawing (SVG/DXF)")}</button>` +
+          `<button type="button" id="bAerDoc">${bi("Xuất Doc (tóm tắt)", "Export Doc (summary)")}</button>`;
+        return rows.concat([[bi("Xuất báo cáo", "Export report"), null, 0, "", { ok: undefined, rec: [bi(xlsxBtn, xlsxBtn), ""], src: [bi("Excel / PFD / CAD / Doc", "Excel / PFD / CAD / Doc"), ""] }]];
+      } },
   ];
   let toolVals = {};
   try { toolVals = JSON.parse(localStorage.getItem("iceas-tools") || "{}"); } catch (e) {}
+  function aerView() {
+    const v = document.getElementById("view");
+    const defs = TOOL_DEFS.filter((t) => t.id.startsWith("aer-"));
+    v.innerHTML = `<section class="panel"><div class="eyebrow">Cấp khí / Aeration</div><h2>Thiết kế hệ thống cấp khí theo handbook</h2>` +
+      `<p class="lead">Mỗi phương án tính độc lập. Bấm “Lấy từ thiết kế” để điền số liệu từ phương án ICEAS đang làm.</p><div class="cards" id="toolCards">` +
+      defs.map((t) => {
+        const vals = Object.assign(toolDefaults(t), toolVals[t.id] || {});
+        const fields = t.f.map(([k, lab, unit, type]) => {
+          const id = `tl-${t.id}-${k}`;
+          const ctl = type === "dtype"
+            ? `<select id="${id}">${Object.entries(TOOLS.DIFFUSERS).map(([key, d]) => `<option value="${key}"${vals[k] === key ? " selected" : ""}>${d.name}</option>`).join("")}</select>`
+            : `<input id="${id}" type="number" step="any" value="${vals[k]}">`;
+          return `<div class="f${type === "dtype" ? " wide" : ""}"><label for="${id}">${lab}</label>${ctl}${type === "dtype" ? "" : `<span class="u">${unit}</span>`}</div>`;
+        }).join("");
+        return `<div class="card" data-tool="${t.id}"><h3>${t.t}</h3><div class="fields">${fields}</div><p class="hint">${t.d}</p>` +
+          `<div class="btns" style="padding:0 14px 10px"><button type="button" data-fill="${t.id}">Lấy từ thiết kế</button></div><div class="tbl" id="out-${t.id}"></div></div>`;
+      }).join("") + `</div></section>`;
+    defs.forEach(runTool);
+    biPass(v);
+  }
   function toolDefaults(t) {
-    const setupOk = validate(1).e.length === 0;
-    const res = setupOk ? compute() : null;
-    return t.def(res ? res.p : Object.assign({}, D, state), res ? res.r : null);
+    try {
+      const setupOk = validate(1).e.length === 0;
+      const res = setupOk ? compute() : null;
+      return t.def(res ? res.p : Object.assign({}, D, state), res ? res.r : null);
+    } catch (e) {
+      return t.def(Object.assign({}, D, state), null);
+    }
   }
   function toolsView() {
     const v = document.getElementById("view");
@@ -12624,6 +12748,14 @@ section.sheet.wide { grid-column: 1 / -1; }
       if (el && tool) { el.value = val; runTool(tool); toast(`Đã chọn ${val} máng mỗi bể`, `${val} decanters per basin selected`); } return; }
     const fill = ev.target.closest && ev.target.closest("[data-fill]");
     if (fill) { delete toolVals[fill.dataset.fill]; toolsView(); toast("Đã lấy số liệu từ thiết kế"); }
+    const aerX = ev.target.closest && ev.target.closest("#bAerXlsx");
+    if (aerX) { exportAerXlsx(); return; }
+    const aerP = ev.target.closest && ev.target.closest("#bAerPfd");
+    if (aerP) { exportAerPfd(); return; }
+    const aerC = ev.target.closest && ev.target.closest("#bAerCad");
+    if (aerC) { exportAerCad(); return; }
+    const aerD = ev.target.closest && ev.target.closest("#bAerDoc");
+    if (aerD) { exportAerDoc(); return; }
   });
   // Accepting the solution writes the adjusted values into the project (check mode, L × W fixed) so the
   // equipment step, report and Excel use them. A solution that misses the effluent targets needs a second click.
@@ -12724,6 +12856,88 @@ section.sheet.wide { grid-column: 1 / -1; }
     { g: "C-Tech – SFC Basic Engineering Package", id: "CT-SAN", t: "Sangola_8.000 m³/ngày_Đô thị_2 bể – C-Tech BEP SFC D-1104 (2024)", full: true, d: CT_EX.sangola,
       note: "Số liệu BEP SFC Sangola 8 MLD (SFC-A4-D1104-BEP-C-Tech-R0), bể chữ nhật tương đương 30 × 15,7 × 5,5 m (BEP dùng bể tròn Ø35,5 m chia 2 ngăn). Bảng DO và áp suất theo BEP Sangola.",
       noteEn: "SFC Sangola 8 MLD BEP data (SFC-A4-D1104-BEP-C-Tech-R0), equivalent rectangular basin 30 × 15.7 × 5.5 m (the BEP uses a Ø35.5 m circular tank split in two). DO table and pressure as in the Sangola BEP." },
+    // ---------- Import từ thư mục dự án (Xylem/Sanitaire ICEAS design sheets) ----------
+    { g: "Dự án nhập từ thư mục (Suoi Nhum, Hoa Xuan – Xylem/Sanitaire ICEAS)", id: "SN-NIT", t: "Suoi Nhum WWTP · NIT · 8 bể · 65.000 m³/ngày · BOD 350", full: true, d: {
+      name: "Suoi Nhum WWTP", caseName: "Suoi Nhum ICEAS – Vietnam", location: "Suoi Nhum, Việt Nam",
+      Q: 65000, qMode: "DIRECT", Qmax: 130000, kMax: 2.0, useVHF: false,
+      BOD: 350, TSS: 350, VSS: 280, TKN: 350, NH4: 140, TP: 7.5, Alk: 73,
+      cBOD: 30, cTSS: 50, cTN: null, cNH4: 10, cTP: 4,
+      eBOD: 30, eTSS: 50, eTN: null, eNH4: 10, eTP: 4,
+      Tmax: 35, Tmin: 20, TairMax: 35, TairMin: -6, alt: 15, RH: 80,
+      kin: "XYLEM", SF: 1.5, DO: 2, mu: 0.75, thMu: 1.07, Kn: 0.74, thKn: 1.053, kd: 0.08, thKd: 1.04, Ko: 0.5,
+      rDN: 0.06, thDN: 1.09, orgN: 1, NeffVSS: 0.07, anoxEff: 0.6667, NO3min: 1,
+      Yv: 0.6, fInert: 0.2, fVnb: 0.3, b: 0.07, thB: 1.04, fN: 0.1, fP: 0.035, sludgeT: "MAX",
+      AlP: 1.5, alFrac: 0.043, alDens: 1.33,
+      minAlk: 50, alkNit: 7.14, alkDN: 3.57, alkExtra: 0, alkChem: "NONE", alkPurity: 0.5,
+      N: 8, sizeMode: "CHECK", massBasis: "MAX", FMmax: 0.094, kNit: 1.0, LW: 3, decClr: 2.4,
+      L: 51, W: 28, TWL: 5.5, Lpre: 6, wall: 0.3, gran: 0.5, bufDes: 1.0, bufMin: 0.6,
+      proc: "NIT", fill: "ICEAS", credTNnit: 15,
+      cyc: 4, settle: 60, decant: 60, aerH: 12, cycV: 3, settleV: 45, decantV: 45,
+      SVIs: 150, SVIset: 120, sepMin: 0.5,
+      Ldec: 12.2, nDec: 2, weirMax: 2.32,
+      aorBOD: 1.2, aorN: 4.57, aorDN: 2.86, credBasis: "CONSENT", credFrac: 1, peak: 1.35, minF: 0.6,
+      alpha: 0.8, beta: 0.95, F: 1, thK: 1.024, de: 0.39, hDiff: 0.2244,
+      sotePerM: 5.58, qDiffMax: 4.04, aDiff: 0.038, mixSBR: 2.1,
+      nStandby: 1, foul: 30, mainHL: 30, dwp: 40, effBlower: 0.70,
+      nSHT: 1, shtDays: 10, shtConc: 15000, shtTWL: 6, mixSHT: 1.8,
+      wasRun: 30, wasQ: 40,
+    },
+      note: "Nguồn: Suoi Nhum ICEAS design sheet.pdf / Suoi Nhum ICEAS.pdf (SEEN, 10/2009). Bể 51 × 28 × 5,5 m, 8 bể, NIT, chu kỳ 4 h (lắng/xả 60/60), sục khí 12 h/ngày. Nước vào: BOD 350, TKN ≈350, TP 7,5 mg/L; nước ra: BOD 30, SS 50, NH3-N 10, TP 4. Lpre = 6 m là giá trị ước tính để minh họa cảnh báo pre-react (≈13% tổng thể tích, trong khoảng 10–15%). Các trường thiếu (VSS, eTN, kinetika chi tiết…) lấy mặc định của ứng dụng.",
+      noteEn: "Source: Suoi Nhum ICEAS design sheets (SEEN, 10/2009). 8-basin NIT ICEAS, 51 × 28 × 5.5 m, 4 h cycle (settle/decant 60/60 min), 12 h/d aeration. Influent BOD 350, TKN ≈350, TP 7.5 mg/L; effluent BOD 30, SS 50, NH3-N 10, TP 4. Lpre = 6 m is an estimated value to demonstrate the pre-react warning (≈13% of total volume, within 10–15%). Missing fields (VSS, eTN, detailed kinetics…) use the app defaults." },
+    { g: "Dự án nhập từ thư mục (Suoi Nhum, Hoa Xuan – Xylem/Sanitaire ICEAS)", id: "HX-NIT", t: "Hoa Xuan Phase II · NIT · 4 bể · 40.000 m³/ngày · BOD 110", full: true, d: {
+      name: "Hoa Xuan Phase II WWTP", caseName: "Hoa Xuan ICEAS – Sanitaire", location: "Hoa Xuan, Việt Nam",
+      Q: 40000, qMode: "DIRECT", Qmax: 52000, kMax: 1.3, useVHF: false,
+      BOD: 110, TSS: 130, VSS: 104, TKN: 31.5, NH4: null, TP: 6, Alk: 190,
+      cBOD: 10, cTSS: 10, cTN: 20, cNH4: null, cTP: 4,
+      eBOD: 10, eTSS: 10, eTN: 20, eNH4: null, eTP: 4,
+      Tmax: 25, Tmin: 25, TairMax: 32, TairMin: -6, alt: null, RH: null,
+      kin: "XYLEM", SF: 1.5, DO: 2, mu: 0.75, thMu: 1.07, Kn: 0.74, thKn: 1.053, kd: 0.08, thKd: 1.04, Ko: 0.5,
+      rDN: 0.06, thDN: 1.09, orgN: 1, NeffVSS: 0.07, anoxEff: 0.6667, NO3min: 1,
+      Yv: 0.6, fInert: 0.2, fVnb: 0.3, b: 0.07, thB: 1.04, fN: 0.1, fP: 0.035, sludgeT: "MAX",
+      AlP: 1.5, alFrac: 0.043, alDens: 1.33,
+      minAlk: 50, alkNit: 7.14, alkDN: 3.57, alkExtra: 0, alkChem: "NONE", alkPurity: 0.5,
+      N: 4, sizeMode: "CHECK", massBasis: "MAX", FMmax: 0.067, kNit: 1.0, LW: 3, decClr: 2.4,
+      L: 35.9, W: 20.6, TWL: 6.0, Lpre: 4, wall: 0.3, gran: 0.5, bufDes: 1.0, bufMin: 0.6,
+      proc: "NIT", fill: "ICEAS", credTNnit: 15,
+      cyc: 4, settle: 60, decant: 60, aerH: null, cycV: 3, settleV: 45, decantV: 45,
+      SVIs: 150, SVIset: 120, sepMin: 0.5,
+      Ldec: 8.38, nDec: 2, weirMax: 2.32,
+      aorBOD: 1.2, aorN: 4.57, aorDN: 2.86, credBasis: "CONSENT", credFrac: 1, peak: 1.35, minF: 0.6,
+      alpha: 0.8, beta: 0.95, F: 1, thK: 1.024, de: 0.39, hDiff: 0.2244,
+      sotePerM: 5.58, qDiffMax: 4.04, aDiff: 0.038, mixSBR: 2.1,
+      nStandby: 1, foul: 30, mainHL: 30, dwp: 40, effBlower: 0.70,
+      nSHT: 1, shtDays: 10, shtConc: 15000, shtTWL: 6, mixSHT: 1.8,
+      wasRun: 30, wasQ: 40,
+    },
+      note: "Nguồn: Hoa Xuan ICEAS design.pdf (Sanitaire, 08/2017). Bể 35,9 × 20,6 × 6,0 m, 4 bể, NIT, chu kỳ 4 h (lắng/xả 60/60). Nước vào: BOD 110, TSS 130, TKN 31,5, TP 6 mg/L; nước ra: BOD/SS 10, TN 20, TP 4. Lpre = 4 m là giá trị ước tính để minh họa cảnh báo pre-react (≈12,5% tổng thể tích, trong khoảng 10–15%). aerH để null (máy bơm chia chung, programmable 0–40 phút/chu kỳ).",
+      noteEn: "Source: Hoa Xuan ICEAS design.pdf (Sanitaire, 08/2017). 4-basin NIT ICEAS, 35.9 × 20.6 × 6.0 m, 4 h cycle (settle/decant 60/60 min). Influent BOD 110, TSS 130, TKN 31.5, TP 6 mg/L; effluent BOD/SS 10, TN 20, TP 4. Lpre = 4 m is an estimated value to demonstrate the pre-react warning (≈12.5% of total volume, within 10–15%). aerH null (shared blowers, programmable 0–40 min/cycle)." },
+    { g: "Dự án nhập từ thư mục (Suoi Nhum, Hoa Xuan – Xylem/Sanitaire ICEAS)", id: "LC-SBR", t: "Lien Chieu WWTP · SBR theo mẻ · 4 bể · 20.000 m³/ngày · BOD 157", full: true, d: {
+      name: "Lien Chieu WWTP", caseName: "Lien Chieu SBR – Sanitaire S27415-16sc", location: "Lien Chieu, Việt Nam",
+      Q: 20000, qMode: "DIRECT", Qmax: 26000, kMax: 1.3, useVHF: false,
+      BOD: 157, TSS: null, VSS: null, TKN: null, NH4: null, TP: null, Alk: 190,
+      cBOD: 20, cTSS: 30, cTN: null, cNH4: null, cTP: null,
+      eBOD: 20, eTSS: 30, eTN: 4, eNH4: null, eTP: null,
+      Tmax: 33, Tmin: 10, TairMax: 32, TairMin: 10, alt: 20, RH: null,
+      kin: "XYLEM", SF: 1.5, DO: 2, mu: 0.75, thMu: 1.07, Kn: 0.74, thKn: 1.053, kd: 0.08, thKd: 1.04, Ko: 0.5,
+      rDN: 0.06, thDN: 1.09, orgN: 1, NeffVSS: 0.07, anoxEff: 0.6667, NO3min: 1,
+      Yv: 0.6, fInert: 0.2, fVnb: 0.3, b: 0.07, thB: 1.04, fN: 0.1, fP: 0.035, sludgeT: "MAX",
+      AlP: 1.5, alFrac: 0.043, alDens: 1.33,
+      minAlk: 50, alkNit: 7.14, alkDN: 3.57, alkExtra: 0, alkChem: "NONE", alkPurity: 0.5,
+      N: 4, sizeMode: "CHECK", massBasis: "MAX", FMmax: 0.104, kNit: 1.0, LW: 4.13, decClr: 2.4,
+      L: 42.1, W: 10.2, TWL: 6.0, Lpre: 0, wall: 0, gran: 0.5, bufDes: 1.0, bufMin: 0.6,
+      proc: "NDN", fill: "BATCH", credTNnit: 15,
+      cyc: 3, settle: 45, decant: 45, aerH: 6, cycV: null, settleV: null, decantV: null,
+      SVIs: 150, SVIset: 120, sepMin: 0.5,
+      Ldec: 7.62, nDec: 1, weirMax: 2.32,
+      aorBOD: 1.2, aorN: 4.57, aorDN: 2.86, credBasis: "CONSENT", credFrac: 1, peak: 1.35, minF: 0.6,
+      alpha: 0.8, beta: 0.95, F: 1, thK: 1.024, de: 0.39, hDiff: 0.2244,
+      sotePerM: 5.58, qDiffMax: 4.04, aDiff: 0.038, mixSBR: 2.1,
+      nStandby: 1, foul: 30, mainHL: 30, dwp: 40, effBlower: 0.70,
+      nSHT: 1, shtDays: 10, shtConc: 15000, shtTWL: 6, mixSHT: 1.8,
+      wasRun: 30, wasQ: 40,
+    },
+      note: "Nguồn: ICEAS 11-9-16 DB-PS.PDF (Sanitaire, 11/2016, mã S27415-16sc) – nằm trong thư mục Sanitaire của Hoa Xuan nhưng nội dung là dự án Lien Chieu 20 MLD. Bể 42,1 × 10,2 × 6,0 m, 4 bể, SBR theo mẻ (BATCH), chu kỳ 3 h (aeration 75/lắng/xả 45/45), sục khí 6 h/ngày. Nước vào: BOD 157 mg/L, Tmax 33/Tmin 10 °C, kiềm 190 mg/L; nước ra: BOD 20, SS 30, TN 4. Lpre/wall = 0 (chế độ theo mẻ không có vùng tiền phản ứng). Các trường thiếu (TSS, VSS, TKN, NH4, TP, nước ra chi tiết…) lấy mặc định của ứng dụng.",
+      noteEn: "Source: ICEAS 11-9-16 DB-PS.PDF (Sanitaire, 11/2016, S27415-16sc) – found in the Hoa Xuan Sanitaire folder but actually the Lien Chieu 20 MLD project. 4-basin SBR batch, 42.1 × 10.2 × 6.0 m, 3 h cycle (aeration 75/settle/decant 45/45 min), 6 h/d aeration. Influent BOD 157 mg/L, Tmax 33/Tmin 10 °C, alkalinity 190 mg/L; effluent BOD 20, SS 30, TN 4. Lpre/wall = 0 (batch mode has no pre-react zone). Missing fields (TSS, VSS, TKN, NH4, TP, detailed effluent…) use the app defaults." },
     // ABJ Case Studies (case_studies.js): Project_Capacity_Wastewater type_Basins
     ...(window.CASE_STUDIES || []),
   ];
@@ -12764,6 +12978,7 @@ section.sheet.wide { grid-column: 1 / -1; }
   document.getElementById("tMc5").addEventListener("click", () => { mode = "mc5"; try { localStorage.setItem("iceas-mode", mode); } catch (e) {} show(); });
   document.getElementById("tCf").addEventListener("click", () => { mode = "cf"; try { localStorage.setItem("iceas-mode", mode); } catch (e) {} show(); });
   document.getElementById("tMix").addEventListener("click", () => { mode = "mix"; try { localStorage.setItem("iceas-mode", mode); } catch (e) {} show(); });
+  document.getElementById("tAer").addEventListener("click", () => { mode = "aer"; try { localStorage.setItem("iceas-mode", mode); } catch (e) {} show(); });
 
   // file download: on claude.ai through the downloads capability, offline through a plain link
   async function saveBlob(filename, blob, okVi, okEn) {
@@ -12853,9 +13068,126 @@ section.sheet.wide { grid-column: 1 / -1; }
     };
     try { navigator.clipboard.writeText(tsv).then(ok, fallback); } catch (e) { fallback(); }
   }
+  // ---------------- Cấp khí: xuất báo cáo (Excel / PFD / CAD / Doc) ----------------
+  async function exportAerXlsx() {
+    if (!window.ExcelJS) { toast("Chưa tải được thư viện Excel – kiểm tra kết nối mạng"); return; }
+    try {
+      const res = computeBase ? computeBase() : null;
+      const aer = res ? res.r.aer : { air: 3200, nDiff: 792, qDiff: 4.04, sote: 5.5, sor: 149 };
+      const wb = new window.ExcelJS.Workbook();
+      wb.creator = "ICEAS Design Studio"; wb.lastModifiedBy = "ICEAS Design Studio"; wb.created = new Date();
+      const ws = wb.addWorksheet("CAP_KHI");
+      ws.columns = [
+        { header: "Hạng mục", key: "item", width: 38 },
+        { header: "Giá trị", key: "val", width: 16 },
+        { header: "Đơn vị", key: "unit", width: 14 },
+        { header: "Căn cứ / ghi chú", key: "note", width: 52 },
+      ];
+      const rows = [
+        ["Tên phương án", "", "", "Xuất từ công cụ Cấp khí"],
+        ["Lưu lượng khí quá trình", aer ? +aer.air.toFixed(1) : 3200, "Nm³/h", "Công cụ Sục khí (AOR → SOR → lưu lượng khí)"],
+        ["Số đĩa", aer ? aer.nDiff : 792, "đĩa", "Công cụ Sục khí / Bố trí lưới"],
+        ["Khí mỗi đĩa", aer ? +aer.qDiff.toFixed(2) : 4.04, "Nm³/h", "Vừa với dải làm việc của đĩa (catalogue)"],
+        ["SOTE", aer ? +aer.sote.toFixed(1) : 5.5, "%", "SOTE thiết bị bọt mịn (handbook)"],
+        ["SOR", aer ? +aer.sor.toFixed(1) : 149, "kgO2/h", "SOR = AOR ÷ hệ số điều chỉnh"],
+        ["Thời gian sục khí", "", "h/ngày", "Theo chu kỳ ICEAS đang chọn"],
+        ["Tiêu thụ điện ước tính", "", "kWh/ngày", "kW × giờ sục (tiêu chuẩn handbook)"],
+        ["Ứng dụng khuyến cáo", "", "", "ICEAS / SBR theo mẻ / thải thải công nghiệp"],
+        ["Bản vẽ bố trí", "", "", "Xem tab Bản vẽ bố trí cấp khí (SVG/DXF tham khảo)"],
+      ];
+      ws.addRows(rows);
+      ws.getCell("A1").font = { bold: true, size: 14 };
+      ws.getRow(1).eachCell((c) => { c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "E1EFF4" } }; c.border = { bottom: { style: "thin" } }; });
+      const filename = "ICEAS_CapKhi_" + (state.name || "du-an").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^\w-]+/g, "_") + ".xlsx";
+      await saveBlob(filename, new Blob([await wb.xlsx.writeBuffer()], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }), "Đã xuất file Excel cấp khí", "Aeration Excel exported");
+    } catch (e) { toast("Không xuất được file: " + e.message, "Export failed: " + e.message); }
+  }
+  function exportAerPfd() {
+    try {
+      const res = computeBase ? computeBase() : null;
+      const aer = res ? res.r.aer : { air: 3200, nDiff: 792, qDiff: 4.04, sote: 5.5 };
+      const svg = `<svg width="820" height="420" xmlns="http://www.w3.org/2000/svg">
+        <rect x="40" y="40" width="740" height="320" fill="none" stroke="#14232b" stroke-width="2"/>
+        <text x="410" y="30" text-anchor="middle" font="16px monospace" fill="#14232b">${bi("PFD – Hệ thống cấp khí ICEAS", "PFD – ICEAS aeration system")}</text>
+        <!-- Máy thổi -->
+        <rect x="60" y="160" width="110" height="70" fill="#e1eff4" stroke="#0f6e8c" stroke-width="2"/>
+        <text x="115" y="195" text-anchor="middle" font="13px monospace">${bi("Máy thổi", "Blower")}</text>
+        <text x="115" y="212" text-anchor="middle" font="11px" fill="#5b6d76">${fmtN(aer ? aer.air : 3200, 0)} Nm³/h</text>
+        <!-- ống chính -->
+        <line x1="170" y1="195" x2="300" y2="195" stroke="#14232b" stroke-width="3"/>
+        <!-- ống nhánh -->
+        <line x1="300" y1="195" x2="300" y2="300" stroke="#14232b" stroke-width="2"/>
+        <line x1="300" y1="300" x2="760" y2="300" stroke="#14232b" stroke-width="2"/>
+        <text x="420" y="315" text-anchor="middle" font="11px" fill="#5b6d76">${bi("Ống nhánh chạy dọc chiều dài bể", "Header pipe runs along basin length")}</text>
+        <!-- Bể -->
+        <rect x="330" y="60" width="430" height="200" fill="none" stroke="#14232b" stroke-width="2"/>
+        <text x="545" y="150" text-anchor="middle" font="14px monospace" fill="#14232b">${bi("Bể cấp khí", "Aeration basin")}</text>
+        <text x="545" y="170" text-anchor="middle" font="11px" fill="#5b6d76">${aer ? aer.nDiff : 792} ${bi("đĩa", "discs")} · ${bi("SOTE", "SOTE")} ${(+ (aer ? aer.sote : 5.5)).toFixed(1)} %</text>
+        <line x1="300" y1="195" x2="330" y2="160" stroke="#14232b" stroke-width="2"/>
+        <line x1="300" y1="195" x2="330" y2="230" stroke="#14232b" stroke-width="2"/>
+        <text x="780" y="360" font="10px" fill="#5b6d76">${bi("Tham khảo handbook cấp khí (Xylem/Sanitaire diffuser data)", "Reference: aeration handbook (Xylem/Sanitaire diffuser data)")}</text>
+      </svg>`;
+      const blob = new Blob([svg], { type: "image/svg+xml" });
+      const filename = "ICEAS_PFD_CapKhi_" + (state.name || "du-an").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^\w-]+/g, "_") + ".svg";
+      saveBlob(filename, blob, "Đã xuất PFD cấp khí", "Aeration PFD exported");
+    } catch (e) { toast("Không xuất được PFD: " + e.message, "PFD export failed: " + e.message); }
+  }
+  function exportAerCad() {
+    try {
+      const res = computeBase ? computeBase() : null;
+      const aer = res ? res.r.aer : { air: 3200, nDiff: 792, qDiff: 4.04 };
+      let dxf = "0\nSECTION\n2\nENTITIES\n";
+      dxf += "0\nLINE\n8\n0\n10\n0\n20\n0\n30\n0\n11\n700\n21\n0\n31\n0\n";
+      dxf += "0\nLINE\n8\n0\n10\n700\n20\n0\n30\n0\n11\n700\n21\n500\n31\n0\n";
+      dxf += "0\nLINE\n8\n0\n10\n0\n20\n500\n30\n0\n11\n0\n21\n500\n31\n0\n";
+      dxf += "0\nLINE\n8\n0\n10\n0\n20\n500\n30\n0\n11\n700\n21\n500\n31\n0\n";
+      const cx = 350, cy = 250, scale = 10;
+      const nDisc = aer ? Math.min(aer.nDiff, 200) : 200;
+      for (let i = 0; i < nDisc; i++) {
+        const x = cx + (i % 20) * 15;
+        const y = cy + Math.floor(i / 20) * 12;
+        dxf += `0\nCIRCLE\n8\n0\n10\n${x}\n20\n${y}\n30\n0\n40\n3\n`;
+      }
+      dxf += "0\nENDSEC\n0\nEOF\n";
+      const blob = new Blob([dxf], { type: "application/dxf" });
+      const filename = "ICEAS_CapKhi_CAD_" + (state.name || "du-an").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^\w-]+/g, "_") + ".dxf";
+      saveBlob(filename, blob, "Đã xuất bản vẽ CAD cấp khí", "Aeration CAD drawing exported");
+    } catch (e) { toast("Không xuất được CAD: " + e.message, "CAD export failed: " + e.message); }
+  }
+  function exportAerDoc() {
+    try {
+      const res = computeBase ? computeBase() : null;
+      const aer = res ? res.r.aer : { air: 3200, nDiff: 792, qDiff: 4.04, sote: 5.5, sor: 149 };
+      const doc = `<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>Báo cáo cấp khí – ICEAS Design Studio</title>
+      <style>body{font:15px/1.5 Source Sans 3,Segoe UI,Arial,sans-serif;color:#14232b;padding:24px}h1{font-family:Barlow Semi Condensed,Arial Narrow,sans-serif}table{border-collapse:collapse;width:100%}th,td{border:1px solid #d4dee2;padding:6px 10px;text-align:left}th{background:#e1eff4;text-transform:uppercase;font-size:.75rem;letter-spacing:.08em}td.n{text-align:right}ul{margin:8px 0 16px;padding-left:20px}</style></head><body>
+      <h1>${bi("Báo cáo hệ thống cấp khí", "Aeration system report")}</h1>
+      <p><b>${bi("Dự án", "Project")}:</b> ${state.name || ""} &nbsp; <b>${bi("Phương án", "Option")}:</b> ${state.caseName || ""} &nbsp; <b>${bi("Ngày", "Date")}:</b> ${state.date || ""}</p>
+      <table><thead><tr><th>${bi("Hạng mục", "Item")}</th><th>${bi("Giá trị", "Value")}</th><th>${bi("Đơn vị", "Unit")}</th><th>${bi("Căn cứ", "Basis")}</th></tr></thead><tbody>
+        <tr><td>${bi("Lưu lượng khí quá trình", "Process air flow")}</td><td class="n">${(+ (aer ? aer.air : 3200)).toFixed(0)}</td><td>Nm³/h</td><td>Công cụ Sục khí (AOR → SOR → lưu lượng khí)</td></tr>
+        <tr><td>${bi("Số đĩa", "Number of discs")}</td><td class="n">${aer ? aer.nDiff : 792}</td><td>đĩa</td><td>Công cụ Sục khí / Bố trí lưới</td></tr>
+        <tr><td>${bi("Khí mỗi đĩa", "Air per disc")}</td><td class="n">${(+ (aer ? aer.qDiff : 4.04)).toFixed(2)}</td><td>Nm³/h</td><td>Vừa dải làm việc của đĩa (catalogue)</td></tr>
+        <tr><td>${bi("SOTE", "SOTE")}</td><td class="n">${(+ (aer ? aer.sote : 5.5)).toFixed(1)} %</td><td>%</td><td>SOTE thiết bị bọt mịn (handbook)</td></tr>
+        <tr><td>${bi("SOR", "SOR")}</td><td class="n">${(+ (aer ? aer.sor : 149)).toFixed(1)}</td><td>kgO2/h</td><td>SOR = AOR ÷ hệ số điều chỉnh</td></tr>
+        <tr><td>${bi("Ứng dụng khuyến cáo", "Recommended application")}</td><td colspan="3">${bi("ICEAS / SBR theo mẻ / thải thải công nghiệp", "ICEAS / batch SBR / industrial effluent")}</td></tr>
+      </tbody></table>
+      <h2>${bi("Phương án cấp khí theo handbook", "Aeration options per handbook")}</h2>
+      <ul>
+        <li><b>${bi("Khí bọt mịn (fine-bubble disc)", "Fine-bubble disc")}</b> – ${bi("SOTE cao, điện ít, hiện đại nhất cho ICEAS/SBR", "High SOTE, low power, best for ICEAS/SBR")}</li>
+        <li><b>${bi("Khí thô (coarse-bubble)", "Coarse-bubble")}</b> – ${bi("Không tắc, rẻ, bảo trì dễ; SOTE thấp", "Clog-free, cheap, easy service; low SOTE")}</li>
+        <li><b>${bi("Khuấy bề mặt (surface aerator)", "Surface mechanical")}</b> – ${bi("Đơn giản, khuấy tốt; SOTE rất thấp, tiếng ồn", "Simple, good mixing; very low SOTE, noisy")}</li>
+        <li><b>${bi("Truyềnhaft (jet aerator)", "Jet aeration")}</b> – ${bi("Khuấy mạnh, không cần máy thổi riêng; đầu tư cao", "Strong mixing, no separate blower; high capex")}</li>
+      </ul>
+      <p class="hint">${bi("Tham khảo: sổ tay cấp khí Xylem/Sanitaire diffuser data (Donna Li / Sanitaire Diffuser folders).", "Reference: aeration handbook – Xylem/Sanitaire diffuser data.")}</p>
+      </body></html>`;
+      const blob = new Blob([doc], { type: "text/html" });
+      const filename = "ICEAS_BaoCao_CapKhi_" + (state.name || "du-an").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^\w-]+/g, "_") + ".html";
+      saveBlob(filename, blob, "Đã xuất Doc báo cáo cấp khí", "Aeration report exported");
+    } catch (e) { toast("Không xuất được Doc: " + e.message, "Doc export failed: " + e.message); }
+  }
 
   show();
   biPass(document.querySelector(".wrap > header")); biPass(document.getElementById("confirm"));
+  window.__iceas = { show, aerView, toolsView, compute, computeBase, validate, toolDefaults, runTool };
 })();
 </script>
 
