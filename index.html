@@ -12595,7 +12595,7 @@ const AER_METHODS = {
           row(bi("Nhược điểm", "Cons"), c => bi(c.m.cons, c.m.cons), null, bi("Handbook", "Handbook")),
           row(bi("Ứng dụng khuyến cáo", "Recommended application"), c => bi("Phù hợp: " + c.m.use, "Suited for: " + c.m.use), null, bi("Cấu hình bể đang chọn", "Current tank configuration")),
         ];
-        return [[bi("So sánh phương án cấp khí", "Aeration method comparison"), null, 0, "", { ok: undefined, rec: [`<table><thead>${head}</thead><tbody>${rows.map(r => r).join("")}</tbody></table>`, `<table><thead>${head}</thead><tbody>${rows.map(r => r).join("")}</tbody></table>`], ""], src: [bi("AER_METHODS / handbook data", "AER_METHODS / handbook data"), ""] }]];
+        return [[bi("So sánh phương án cấp khí", "Aeration method comparison"), null, 0, "", { ok: undefined, rec: [`<table><thead>${head}</thead><tbody>${rows.map(r => r).join("")}</tbody></table>`, `<table><thead>${head}</thead><tbody>${rows.map(r => r).join("")}</tbody></table>`], src: [bi("AER_METHODS / handbook data", "AER_METHODS / handbook data"), ""] }]];
       } },
     { id: "aer-layout", t: "Bản vẽ bố trí cấp khí", d: "Vẽ sơ đồ bể, ống nhánh (header) chạy dọc chiều dài, đĩa phân phối khí, đánh dấu vị trí máy thổi và máng thu. Dùng cho PFD và bản vẽ CAD tham khảo. Có nhiều phương án bố trí cho mỗi loại cấp khí (chân lưới, giữa bể, hai đầu, trộn hỗn hợp).",
       f: [["layout", "Phương án bố trí", "", "layout"], ["L", "Chiều dài bể", "m"], ["W", "Chiều rộng bể", "m"], ["nGrid", "Số lưới", "lưới"], ["nDiff", "Tổng số đĩa", "đĩa"], ["clrEnd", "Khoảng hở hai đầu lưới", "m"], ["clrSide", "Khoảng hở sát tường", "m"], ["hdrMin", "Khoảng cách ống nhánh tối thiểu", "m"], ["discMin", "Khoảng cách đĩa tối thiểu", "m"]],
@@ -12828,7 +12828,7 @@ const AER_METHODS = {
     for (const [lab, v, d, u, c] of rows) {
       body += `<tr class="key"><td>${lab}${c ? pill(c) : ""}${c ? `<div class="why ${c.ok === false ? "bad" : c.ok === undefined ? "info" : ""}">${bi(c.why ? c.why[0] : "", c.why ? c.why[1] : "")}</div>` : ""}</td>` +
         `<td class="n">${v === null ? "" : fmtN(v, d)}</td><td class="u">${u}</td>` +
-        `<td class="rec">${c ? `<b>${c.rec && /^\s*<(svg|table)/.test(c.rec[0]) ? c.rec[0] : bi(c.rec[0], c.rec[1])}</b>${c.src ? `<div class="src">${bi(c.src[0], c.src[1])}</div>` : ""}` +
+        `<td class="rec">${c ? `<b>${c.rec && c.rec[0] && /^\s*<(svg|table)/.test(c.rec[0]) ? c.rec[0] : bi(c.rec && c.rec[0] ? c.rec[0] : "", c.rec && c.rec[1] ? c.rec[1] : "")}</b>${c.src ? `<div class="src">${bi(c.src[0], c.src[1])}</div>` : ""}` +
           (c.act && c.act.length ? `<div class="acts">${c.act.map((a) => `<button type="button" class="apply" data-tlset="${t.id}|nDec|${a.n}">${bi(a.vi, a.en)}</button>`).join("")}</div>` : "") : ""}</td></tr>`;
       // drawing rows: raw SVG moved to its own section below the table (Mixer mxsheet pattern)
       if (c && c.draw) {
