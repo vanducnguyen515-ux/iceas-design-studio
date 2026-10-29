@@ -12563,7 +12563,7 @@ section.sheet.wide { grid-column: 1 / -1; }
         ];
         return rows;
       } },
-    { id: "aer-layout", t: "Bản vẽ bố trí cấp khí", d: "Vẽ sơ đồ bể, ống nhánh (header) chạy dọc chiều dài, đĩa phân phối khí đều verteilt, علام vị trí máy thổi và máng thu. Dùng cho PFD và bản vẽ CAD tham khảo.",
+    { id: "aer-layout", t: "Bản vẽ bố trí cấp khí", d: "Vẽ sơ đồ bể, ống nhánh (header) chạy dọc chiều dài, đĩa phân phối khí đều verteilt, đánh dấu vị trí máy thổi và máng thu. Dùng cho PFD và bản vẽ CAD tham khảo.",
       f: [["L", "Chiều dài bể", "m"], ["W", "Chiều rộng bể", "m"], ["nGrid", "Số lưới", "lưới"], ["nDiff", "Tổng số đĩa", "đĩa"], ["clrEnd", "Khoảng hở hai đầu lưới", "m"], ["clrSide", "Khoảng hở sát tường", "m"], ["hdrMin", "Khoảng cách ống nhánh tối thiểu", "m"], ["discMin", "Khoảng cách đĩa tối thiểu", "m"]],
       def: (p, r) => ({ L: r ? +(r.dim.L - (p.fill === "BATCH" ? 0 : p.Lpre + p.wall)).toFixed(2) : 31.7, W: r ? r.dim.W : 12, nGrid: 2, nDiff: r ? r.aer.nDiff : 792, clrEnd: 0.3, clrSide: 0.3, hdrMin: 0.6, discMin: 0.3 }),
       run: (v) => {
@@ -12622,7 +12622,8 @@ section.sheet.wide { grid-column: 1 / -1; }
           `<button type="button" id="bAerPfd">${bi("Xuất PFD (trực tuyến)", "Export PFD (online)")}</button>` +
           `<button type="button" id="bAerCad">${bi("Xuất bản vẽ CAD (SVG/DXF)", "Export CAD drawing (SVG/DXF)")}</button>` +
           `<button type="button" id="bAerDoc">${bi("Xuất Doc (tóm tắt)", "Export Doc (summary)")}</button>`;
-        return rows.concat([[bi("Xuất báo cáo", "Export report"), null, 0, "", { ok: undefined, rec: [bi(xlsxBtn, xlsxBtn), ""], src: [bi("Excel / PFD / CAD / Doc", "Excel / PFD / CAD / Doc"), ""] }]];
+        const lastRow = [bi("Xuất báo cáo", "Export report"), null, 0, "", { ok: undefined, rec: [bi(xlsxBtn, xlsxBtn), ""], src: [bi("Excel / PFD / CAD / Doc", "Excel / PFD / CAD / Doc"), ""] }];
+        return rows.concat([lastRow]);
       } },
   ];
   let toolVals = {};
@@ -12689,7 +12690,7 @@ section.sheet.wide { grid-column: 1 / -1; }
     const pill = (c) => c.ok === undefined ? "" : ` <span class="pill ${c.ok ? "ok" : "bad"}">${c.ok ? bi("Đạt", "Pass") : (c.failLab ? bi(c.failLab[0], c.failLab[1]) : bi("Ngoài khuyến cáo", "Outside recommendation"))}</span>`;
     document.getElementById("out-" + t.id).innerHTML = `<table class="tchk"><thead><tr><th>${bi("Đại lượng", "Quantity")}</th><th style="text-align:right">${bi("Giá trị", "Value")}</th>` +
       `<th>${bi("Đơn vị", "Unit")}</th><th>${bi("Khuyến cáo · căn cứ", "Recommended · basis")}</th></tr></thead><tbody>` + rows.map(([lab, v, d, u, c]) =>
-      `<tr class="key"><td>${lab}${c ? pill(c) : ""}${c ? `<div class="why ${c.ok === false ? "bad" : c.ok === undefined ? "info" : ""}">${bi(c.why[0], c.why[1])}</div>` : ""}</td>` +
+      `<tr class="key"><td>${lab}${c ? pill(c) : ""}${c ? `<div class="why ${c.ok === false ? "bad" : c.ok === undefined ? "info" : ""}">${bi(c.why ? c.why[0] : "", c.why ? c.why[1] : "")}</div>` : ""}</td>` +
       `<td class="n">${v === null ? "" : fmtN(v, d)}</td><td class="u">${u}</td>` +
       `<td class="rec">${c ? `<b>${bi(c.rec[0], c.rec[1])}</b>${c.src ? `<div class="src">${bi(c.src[0], c.src[1])}</div>` : ""}` +
         (c.act && c.act.length ? `<div class="acts">${c.act.map((a) => `<button type="button" class="apply" data-tlset="${t.id}|nDec|${a.n}">${bi(a.vi, a.en)}</button>`).join("")}</div>` : "") : ""}</td></tr>`).join("") + `</tbody></table>`;
