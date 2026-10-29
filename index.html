@@ -266,6 +266,16 @@ table.tchk td.rec { grid-column: 1 / -1; margin-top: 6px; padding: 6px 9px !impo
 table.tchk td.rec:empty { display: none; }
 table.tchk td.rec .acts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; } table.tchk td.rec .acts .apply { margin-left: 0; }
 table.tchk td.rec .src { color: var(--muted); margin-top: 2px; }
+/* nested tables inside a rec cell (e.g. aer-cmp comparison) must not be grid-compressed by tchk rows */
+table.tchk td.rec table { display: table; border-collapse: collapse; width: 100%; min-width: auto; margin-top: 4px; }
+/* standalone drawing section below a tool table – Mixer mxsheet pattern */
+.aerdraw { margin: 12px 14px 14px; border: 1px solid var(--line); border-radius: 8px; overflow-x: auto; }
+.aerdraw svg { display: block; min-width: 720px; border: 1px solid var(--line); background: #fff; }
+.aerdraw h2 { padding: 8px 14px 0; margin: 0; font-size: 1rem; letter-spacing: .01em; }
+/* aer-cmp comparison table inside td.rec: normal table look */
+table.tchk td.rec table th, table.tchk td.rec table td { border: 1px solid var(--line); padding: 4px 6px; font-size: .82rem; text-align: center; vertical-align: middle; }
+table.tchk td.rec table th { background: var(--accent-soft); font-weight: 600; }
+table.tchk td.rec table td.u { font-size: .72rem; color: var(--muted); }
 .card > h3 { font-size: 1.05rem; padding: 9px 14px; border-bottom: 1px solid var(--line); background: var(--accent-soft); border-radius: 8px 8px 0 0; }
 .card .fields { padding: 12px 14px; }
 .f input[aria-invalid="true"] { border-color: var(--bad); background: var(--bad-soft); }
@@ -12585,7 +12595,7 @@ const AER_METHODS = {
           row(bi("Nhược điểm", "Cons"), c => bi(c.m.cons, c.m.cons), null, bi("Handbook", "Handbook")),
           row(bi("Ứng dụng khuyến cáo", "Recommended application"), c => bi("Phù hợp: " + c.m.use, "Suited for: " + c.m.use), null, bi("Cấu hình bể đang chọn", "Current tank configuration")),
         ];
-        return [[bi("So sánh phương án cấp khí", "Aeration method comparison"), null, 0, "", { ok: undefined, rec: [bi(`<table class="tchk"><thead>${head}</thead><tbody>${rows.map(r => r).join("")}</tbody></table>`, `<table class="tchk"><thead>${head}</thead><tbody>${rows.map(r => r).join("")}</tbody></table>`), ""], src: [bi("AER_METHODS / handbook data", "AER_METHODS / handbook data"), ""] }]];
+        return [[bi("So sánh phương án cấp khí", "Aeration method comparison"), null, 0, "", { ok: undefined, rec: [`<table><thead>${head}</thead><tbody>${rows.map(r => r).join("")}</tbody></table>`, `<table><thead>${head}</thead><tbody>${rows.map(r => r).join("")}</tbody></table>`], ""], src: [bi("AER_METHODS / handbook data", "AER_METHODS / handbook data"), ""] }]];
       } },
     { id: "aer-layout", t: "Bản vẽ bố trí cấp khí", d: "Vẽ sơ đồ bể, ống nhánh (header) chạy dọc chiều dài, đĩa phân phối khí, đánh dấu vị trí máy thổi và máng thu. Dùng cho PFD và bản vẽ CAD tham khảo. Có nhiều phương án bố trí cho mỗi loại cấp khí (chân lưới, giữa bể, hai đầu, trộn hỗn hợp).",
       f: [["layout", "Phương án bố trí", "", "layout"], ["L", "Chiều dài bể", "m"], ["W", "Chiều rộng bể", "m"], ["nGrid", "Số lưới", "lưới"], ["nDiff", "Tổng số đĩa", "đĩa"], ["clrEnd", "Khoảng hở hai đầu lưới", "m"], ["clrSide", "Khoảng hở sát tường", "m"], ["hdrMin", "Khoảng cách ống nhánh tối thiểu", "m"], ["discMin", "Khoảng cách đĩa tối thiểu", "m"]],
@@ -12705,7 +12715,7 @@ const AER_METHODS = {
           [bi("Tổng số đĩa bố trí", "Total discs laid out"), discs.length, 0, "đĩa", { ok: discs.length >= v.nDiff, rec: [bi(fmtN(discs.length, 0) + " ≥ " + fmtN(v.nDiff, 0) + " cần", fmtE(discs.length, 0) + " ≥ " + fmtE(v.nDiff, 0) + " required"), ""], src: [bi("Bố trí cấp khí", "Aeration layout"), ""] }],
           [bi("Khoảng cách ống nhánh", "Header spacing"), o.hdrSpacing * 1000, 0, "mm", { ok: true, rec: [bi(fmtN(o.hdrSpacing * 1000, 0) + " mm", fmtE(o.hdrSpacing * 1000, 0) + " mm"), ""], src: [bi("≈ 3 × khoảng cách đĩa", "≈ 3 × disc spacing"), ""] }],
           [bi("Khoảng cách đĩa", "Disc spacing"), o.discSpacing * 1000, 0, "mm", { ok: true, rec: [bi(fmtN(o.discSpacing * 1000, 0) + " mm", fmtE(o.discSpacing * 1000, 0) + " mm"), ""], src: [bi("≥ khoảng cách tối thiểu nhập", "≥ minimum entered"), ""] }],
-          [bi("Bản vẽ bố trí", "Layout drawing"), null, 0, "", { ok: undefined, rec: [svg, ""], src: [bi("PFD / CAD tham khảo", "PFD / CAD reference"), ""] }],
+          [bi("Bản vẽ bố trí", "Layout drawing"), null, 0, "", { ok: undefined, draw: svg, src: [bi("PFD / CAD tham khảo", "PFD / CAD reference"), ""] }],
         ];
       } },
     { id: "aer-out", t: "Xuất báo cáo cấp khí", d: "Nút xuất bảng Excel tính toán (công thức sống), PFD (trực tuyến), bản vẽ CAD (SVG/DXF tham khảo) và Doc (tóm tắt phương án, tiêu thụ điện, ưu nhược, khuyến cáo).",
@@ -12813,12 +12823,20 @@ const AER_METHODS = {
     try { rows = t.run(vals); } catch (e) { rows = [["Số liệu chưa hợp lệ", null, 0, ""]]; }
     // each checked row: pass/fail pill, the reason under the name, and the recommended value with its basis in the last column
     const pill = (c) => c.ok === undefined ? "" : ` <span class="pill ${c.ok ? "ok" : "bad"}">${c.ok ? bi("Đạt", "Pass") : (c.failLab ? bi(c.failLab[0], c.failLab[1]) : bi("Ngoài khuyến cáo", "Outside recommendation"))}</span>`;
+    let body = "";
+    let draws = "";
+    for (const [lab, v, d, u, c] of rows) {
+      body += `<tr class="key"><td>${lab}${c ? pill(c) : ""}${c ? `<div class="why ${c.ok === false ? "bad" : c.ok === undefined ? "info" : ""}">${bi(c.why ? c.why[0] : "", c.why ? c.why[1] : "")}</div>` : ""}</td>` +
+        `<td class="n">${v === null ? "" : fmtN(v, d)}</td><td class="u">${u}</td>` +
+        `<td class="rec">${c ? `<b>${c.rec && /^\s*<(svg|table)/.test(c.rec[0]) ? c.rec[0] : bi(c.rec[0], c.rec[1])}</b>${c.src ? `<div class="src">${bi(c.src[0], c.src[1])}</div>` : ""}` +
+          (c.act && c.act.length ? `<div class="acts">${c.act.map((a) => `<button type="button" class="apply" data-tlset="${t.id}|nDec|${a.n}">${bi(a.vi, a.en)}</button>`).join("")}</div>` : "") : ""}</td></tr>`;
+      // drawing rows: raw SVG moved to its own section below the table (Mixer mxsheet pattern)
+      if (c && c.draw) {
+        draws += `<section class="sheet wide"><h2>${lab}</h2><div class="mxsheet">${c.draw}</div></section>`;
+      }
+    }
     document.getElementById("out-" + t.id).innerHTML = `<table class="tchk"><thead><tr><th>${bi("Đại lượng", "Quantity")}</th><th style="text-align:right">${bi("Giá trị", "Value")}</th>` +
-      `<th>${bi("Đơn vị", "Unit")}</th><th>${bi("Khuyến cáo · căn cứ", "Recommended · basis")}</th></tr></thead><tbody>` + rows.map(([lab, v, d, u, c]) =>
-      `<tr class="key"><td>${lab}${c ? pill(c) : ""}${c ? `<div class="why ${c.ok === false ? "bad" : c.ok === undefined ? "info" : ""}">${bi(c.why ? c.why[0] : "", c.why ? c.why[1] : "")}</div>` : ""}</td>` +
-      `<td class="n">${v === null ? "" : fmtN(v, d)}</td><td class="u">${u}</td>` +
-      `<td class="rec">${c ? `<b>${c.rec && /^\s*<svg/.test(c.rec[0]) ? c.rec[0] : bi(c.rec[0], c.rec[1])}</b>${c.src ? `<div class="src">${bi(c.src[0], c.src[1])}</div>` : ""}` +
-        (c.act && c.act.length ? `<div class="acts">${c.act.map((a) => `<button type="button" class="apply" data-tlset="${t.id}|nDec|${a.n}">${bi(a.vi, a.en)}</button>`).join("")}</div>` : "") : ""}</td></tr>`).join("") + `</tbody></table>`;
+      `<th>${bi("Đơn vị", "Unit")}</th><th>${bi("Khuyến cáo · căn cứ", "Recommended · basis")}</th></tr></thead><tbody>${body}</tbody></table>` + draws;
     biPass(document.getElementById("out-" + t.id));
   }
 
