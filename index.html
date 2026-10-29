@@ -258,7 +258,7 @@ table.tchk td.rec { font-size: .78rem; min-width: 9em; } table.tchk td.rec b { f
 table.tchk, table.tchk tbody { display: block; width: 100%; }
 table.tchk thead { display: none; }
 table.tchk tr { display: grid; grid-template-columns: minmax(0, 1fr) minmax(5.5em, auto) 6.5em; column-gap: 12px; align-items: baseline; padding: 8px 14px; border-bottom: 1px solid var(--line); }
-table.tchk td { padding: 0 !important; border: 0 !important; min-width: 0 !important; }
+table.tchk td { padding: 0 !important; border: 0 !important; min-width: 0 !important; white-space: normal; overflow-wrap: anywhere; }
 table.tchk td:first-child { font-weight: 600; }
 table.tchk td.n { text-align: right; font: 500 1.05rem var(--f-mono); white-space: nowrap; }
 table.tchk td.u { color: var(--muted); font-size: .8rem; }
@@ -344,7 +344,7 @@ section.sheet.wide { grid-column: 1 / -1; }
       <div class="sub" id="subtitle"></div>
     </div>
     <div class="btns">
-      <div class="seg" role="tablist"><button id="tDesign" type="button" role="tab">Thiết kế</button><button id="tTools" type="button" role="tab">Công cụ thiết kế</button><button id="tMc5" type="button" role="tab">Đối chiếu MC5</button><button id="tCf" type="button" role="tab">Dấu chân cacbon</button><button id="tMix" type="button" role="tab">Máy khuấy</button><button id="tAer" type="button" role="tab">Cấp khí</button></div>
+      <div class="seg" role="tablist"><button id="tDesign" type="button" role="tab">Thiết kế</button><button id="tTools" type="button" role="tab">Công cụ thiết kế</button><button id="tMc5" type="button" role="tab">Đối chiếu MC5</button><button id="tCf" type="button" role="tab">Dấu chân cacbon</button><button id="tMix" type="button" role="tab">Máy khuấy</button></div>
       <button id="bNew" type="button">Dự án mới</button>
       <select id="bLib" aria-label="Thư viện mẫu" title="Thư viện mẫu"></select>
       <button id="bRef" type="button">Ẩn cột đối chiếu</button>
@@ -927,6 +927,7 @@ section.sheet.wide { grid-column: 1 / -1; }
     Ldec: 3, nDec: 1, weirMax: 2.32,
     // aeration
     aorBOD: 1.2, aorN: 4.57, aorDN: 2.86, credBasis: "CONSENT", credFrac: 1, peak: 1.35, minF: 0.6,
+    aerMethod: "FINE",
     alpha: 0.65, beta: 0.98, F: 1, thK: 1.024, de: 0.39, hDiff: 0.2244,
     sotePerM: 5.58, qDiffMax: 4.04, aDiff: 0.038, mixSBR: 2.1,
     nStandby: 1, foul: 30, mainHL: 30, dwp: 40, effBlower: 0.70,
@@ -945,6 +946,7 @@ section.sheet.wide { grid-column: 1 / -1; }
 
   function calc(inp) {
     const p = Object.assign({}, DEFAULTS, inp);
+    const num = (k) => typeof p[k] === "number" && isFinite(p[k]);
     if (p.sizeMode === "SPEC") p.sizeMode = "CHECK";   // projects saved before AUTO/CHECK
     if (p.sizeMode === "CALC") p.sizeMode = "AUTO";
     // maximum flows: entered directly, or as peaking factor × average flow
@@ -1186,17 +1188,21 @@ section.sheet.wide { grid-column: 1 / -1; }
     const Pb = (1 - 2.25577e-5 * p.alt) ** 5.25588;
     const dfac = 1 + p.de * sub / 10.33;
     const cs20 = csat(20) * dfac, csT = csat(p.Tmax) * dfac * Pb;
-    const ratio = p.alpha * p.F * p.thK ** (p.Tmax - 20) * (p.beta * csT - p.DO) / cs20;
+    const mth = AER_METHODS[p.aerMethod] || AER_METHODS.FINE;
+    const alpha = mth.alpha ?? p.alpha, beta = mth.beta ?? p.beta;
+    const ratio = alpha * p.F * p.thK ** (p.Tmax - 20) * (beta * csT - p.DO) / cs20;
     const sor = r.aor.maxH / ratio;
-    const sote = p.sotePerM * sub / 100;
+    const sote = mth.sote * sub / 100;
     const airP = sor / (sote * O2_PER_NM3);
-    const airM = p.mixSBR * A;
+    const airM = (mth.mixSBR ?? p.mixSBR) * A;
     const air = Math.max(airP, airM);
-    const nDiff = Math.ceil(air / p.qDiffMax);
+    const qDiffMax = mth.qDiffMax ?? p.qDiffMax;
+    const nDiff = Math.ceil(air / qDiffMax);
+    const aDiff = mth.aDiff ?? p.aDiff;
     r.aer = {
       sub, Pb, cs20, csT, ratio, sor, sote, airP, airM, air, gov: airP >= airM ? "Nhu cầu oxy" : "Khuấy trộn",
-      nDiff, qDiff: air / nDiff, AtAd: A / (nDiff * p.aDiff),
-      sorAvg: sor / p.peak, airAvg: airP / p.peak,
+      nDiff, qDiff: air / nDiff, AtAd: A / (nDiff * aDiff),
+      sorAvg: sor / p.peak, airAvg: airP / p.peak, method: p.aerMethod,
     };
 
     // ---------- blowers ----------
@@ -7991,6 +7997,15 @@ section.sheet.wide { grid-column: 1 / -1; }
   else root.TOOLS = api;
 })(window);
 
+// Aeration option types per the handbook (Xylem/Sanitaire diffuser data) – used by the "So sánh phương án cấp khí" tool.
+// kw = heuristic blower kW per 1000 Nm³/h of process air; sote = standard oxygen transfer efficiency %.
+const AER_METHODS = {
+  FINE:   { vi: "Khí bọt mịn (fine-bubble disc)",              en: "Fine-bubble disc aeration",              kw: 0.55, sote: 12, sotePerM: 4.5, qDiffMax: 4.0, aDiff: 0.072, mixSBR: 0.30, alpha: 0.85, beta: 0.95, pros: "SOTE cao, điện ít, bùn lắng ít, hiện đại nhất cho ICEAS/SBR", cons: "Chi phí đầu tư cao, dễ tắc nếu nước thải chưa xử lý trước", use: "ICEAS, SBR theo mẻ, xử lý hiện đại" },
+  COARSE: { vi: "Khí thô (coarse-bubble)",                     en: "Coarse-bubble aeration",                     kw: 0.90, sote:  6, sotePerM: 2.2, qDiffMax: 8.0, aDiff: 0.120, mixSBR: 0.50, alpha: 0.80, beta: 0.90, pros: "Không tắc, rẻ, bảo trì dễ",                                                        cons: "SOTE thấp, điện nhiều, khuấy trộn kém ở đầy nông",                                                          use: "Khu chọn (selector), bể thải thải công nghiệp dầu mỡ" },
+  SURFACE:{ vi: "Khuấy bề mặt (surface aerator)",              en: "Surface mechanical aeration",              kw: 1.20, sote: 2.5, sotePerM: 1.5, qDiffMax: null, aDiff: null, mixSBR: null, alpha: 0.70, beta: 0.85, pros: "Cấu trúc đơn giản, không cần ống thổi riêng, khuấy trộn tốt",              cons: "SOTE rất thấp, tiếng ồn lớn, không hạn chế được nitrat hóa sâu",                                       use: "Bể tiền-thowali, khu chọn, khu vực điện giá thấp" },
+  JET:    { vi: "Truyềnhaft (jet aerator)",                    en: "Jet aeration",                             kw: 1.00, sote:  8, sotePerM: 3.0, qDiffMax: null, aDiff: null, mixSBR: null, alpha: 0.85, beta: 0.95, pros: "Khuấy trộn mạnh, không cần máy thổi riêng",                                                    cons: "Đầu tư cao, bảo trì dưới nước khó",                                                                          use: "Bể sâu, không gian ít, cần khuấy trộn cường độ cao" },
+};
+
 </script>
 <script>
 // C-Tech (SFC Environmental Technologies – cyclic activated sludge, 4th-generation SBR with selector and OUR control).
@@ -11183,6 +11198,13 @@ section.sheet.wide { grid-column: 1 / -1; }
     qMode: [["DIRECT", "Nhập trực tiếp (m³/ngày)"], ["FACTOR", "Theo hệ số × lưu lượng TB"]],
     sludgeT: [["MAX", "Tmax (như Xylem)"], ["MIN", "Tmin (thận trọng)"]],
     credBasis: [["CONSENT", "Theo TN/NH4 cam kết"], ["DESIGN", "Theo NO3 khử dự kiến"]],
+    aerMethod: Object.entries(AER_METHODS).map(([k, m]) => [k, m.vi]),
+    layout: [
+      ["STD", "Chân lưới – Grid"],
+      ["MID", "Giữa bể – Mid-basin"],
+      ["END", "Hai đầu bể – End zones"],
+      ["MIX", "Trộn hỗn hợp – Mixed"],
+    ],
     cycChart: (window.XYLEM_CYCLES || []).map((c) => [c.id, chartLabel(c)]),
     cfGwp: [["AR5", "IPCC AR5 – CH4 28, N2O 265"], ["AR6", "IPCC AR6 – CH4 27, N2O 273"], ["EUREAU", "EurEau – CH4 34, N2O 298"]],
     cfGrid: [["VN", "Lưới điện Việt Nam – 0,6766 tCO2/MWh"], ["EU", "EU trung bình – 0,415"], ["EU_M", "EU biên – 0,750"], ["COAL", "Nhiệt điện than – 1,0"], ["CUSTOM", "Tự nhập"]],
@@ -11230,7 +11252,7 @@ section.sheet.wide { grid-column: 1 / -1; }
     ["Lắng và máng thu", false, [["SVIs", "SVI tính thể tích bùn", "mL/g"], ["SVIset", "SVI tính lắng", "mL/g"], ["sepMin", "Khoảng cách máng thu – lớp bùn tối thiểu", "m"],
       ["Ldec", "Chiều dài máng thu (decanter)", "m"], ["nDec", "Số máng thu mỗi bể", "cái"], ["weirMax", "Tải máng thu lớn nhất", "m³/phút·m"],
       ["decClr", "Khoảng hở ngang bể quanh máng thu", "m"]]],
-    ["Oxy và sục khí", false, [["aorBOD", "AOR/BOD khử", "kgO2/kgBOD"], ["aorN", "AOR/N nitrat hóa", "kgO2/kgN"], ["aorDN", "Tín chỉ O2 khử nitrat", "kgO2/kgN"],
+    ["Oxy và sục khí", false, [["aerMethod", "Phương án cấp khí", "", "sel"], ["aorBOD", "AOR/BOD khử", "kgO2/kgBOD"], ["aorN", "AOR/N nitrat hóa", "kgO2/kgN"], ["aorDN", "Tín chỉ O2 khử nitrat", "kgO2/kgN"],
       ["credBasis", "Cơ sở tính tín chỉ (NDN)", "", "sel"], ["credTNnit", "TN cơ sở tính tín chỉ (NIT)", "mg/L"], ["credFrac", "Tỉ lệ tín chỉ", "-"], ["peak", "Hệ số AOR lớn nhất / TB", "-"], ["minF", "Hệ số AOR nhỏ nhất / TB", "-"],
       ["alpha", "α", "-"], ["beta", "β", "-"], ["F", "Hệ số bám bẩn đĩa", "-"], ["thK", "θ KLa", "-"], ["de", "Hệ số độ sâu bão hòa de", "-"],
       ["hDiff", "Chiều cao mặt đĩa so với đáy", "m"], ["sotePerM", "SOTE theo độ ngập", "%/m"], ["qDiffMax", "Lưu lượng khí lớn nhất mỗi đĩa", "Nm³/h"],
@@ -11463,7 +11485,7 @@ section.sheet.wide { grid-column: 1 / -1; }
     { t: "Thiết lập", lead: "Lưu lượng, chất lượng nước thải vào, yêu cầu nước ra và điều kiện khu vực.",
       groups: ["Lưu lượng", "Nước thải đầu vào", "Nước ra cam kết (tức thời)", "Nước ra thiết kế (trung bình)", "Điều kiện khu vực"] },
     { t: "Thiết kế", lead: "Chu kỳ, hệ số quá trình và tiêu chí kích thước. Thể tích và kích thước bể được tự tính theo khuyến cáo (trình tự ABJ); kết quả và trình tự tính ở cuối trang cập nhật ngay khi sửa.",
-      groups: ["Chu kỳ vận hành", "Bể ICEAS", "Nitrat hóa", "Khử nitrat", "Bùn", "Khử P hóa chất (phèn nhôm)", "Độ kiềm", "Lắng và máng thu"], preview: true },
+      groups: ["Chu kỳ vận hành", "Bể ICEAS", "Nitrat hóa", "Khử nitrat", "Bùn", "Khử P hóa chất (phèn nhôm)", "Độ kiềm", "Lắng và máng thu", "Oxy và sục khí"], preview: true },
     { t: "Giải pháp", lead: "Kết quả tính quá trình và kích thước bể. Kiểm tra cảnh báo, chỉnh lại ở bước Thiết kế nếu cần, rồi chấp nhận giải pháp.",
       sheets: ["Tải lượng", "Quá trình", "Kích thước bể", "Chu kỳ", "Nitrat hóa – khử nitrat", "Bùn", "Độ kiềm", "Thủy lực và máng thu", "Lắng"], tank: true, accept: "Chấp nhận giải pháp" },
     { t: "Thiết bị", lead: "Hệ thống sục khí, máy thổi khí, bể chứa bùn và bơm bùn dư.",
@@ -11740,7 +11762,6 @@ section.sheet.wide { grid-column: 1 / -1; }
     document.getElementById("tMc5").className = mode === "mc5" ? "on" : "";
     document.getElementById("tCf").className = mode === "cf" ? "on" : "";
     document.getElementById("tMix").className = mode === "mix" ? "on" : "";
-    document.getElementById("tAer").className = mode === "aer" ? "on" : "";
     if (mode === "mix") {
       document.getElementById("stepper").hidden = true;
       header(null);
@@ -11755,7 +11776,6 @@ section.sheet.wide { grid-column: 1 / -1; }
     if (mode === "tools") { header(null); document.getElementById("subtitle").innerHTML = bi("Công cụ tính riêng: sục khí, lưới đĩa, máy thổi khí, máng thu, phèn, thể tích phễu"); toolsView(); return; }
     if (mode === "mc5") { header(validate(1).e.length ? null : compute()); mc5View(); return; }
     if (mode === "cf") { header(validate(1).e.length ? null : compute()); cfView(); return; }
-    if (mode === "aer") { header(null); aerView(); return; }
     const s = STEPS_()[step];
     const v = document.getElementById("view");
     let h = `<section class="panel"><div class="eyebrow">Bước ${step + 1} / ${STEPS.length}</div><h2>${s.t}</h2><p class="lead">${s.lead}</p>`;
@@ -12453,9 +12473,9 @@ section.sheet.wide { grid-column: 1 / -1; }
   const info = (why, rec, src) => ({ why, rec, src });
   const TOOL_DEFS = [
     { id: "aer", t: "Sục khí: AOR → SOR → lưu lượng khí → số đĩa", d: "Tương đương các hàm SOTE, AorSor, DiscCount. SOTE theo loại đĩa, lưu lượng khí mỗi đĩa và mật độ đĩa (At/Ad).",
-      f: [["type", "Loại thiết bị phân phối khí", "", "dtype"], ["aor", "AOR lớn nhất mỗi bể", "kgO2/h"], ["area", "Diện tích đáy được sục khí", "m²"], ["sub", "Độ ngập đĩa", "m"],
+      f: [["type", "Loại thiết bị phân phối khí", "", "dtype"], ["method", "Phương án cấp khí", "", "dmtype"], ["aor", "AOR lớn nhất mỗi bể", "kgO2/h"], ["area", "Diện tích đáy được sục khí", "m²"], ["sub", "Độ ngập đĩa", "m"],
         ["qTarget", "Lưu lượng khí mục tiêu mỗi đĩa", "Nm³/h"], ["alpha", "α", "-"], ["beta", "β", "-"], ["T", "Nhiệt độ nước", "°C"], ["DO", "DO", "mg/L"], ["alt", "Cao độ", "m"], ["mix", "Khí khuấy trộn tối thiểu", "Nm³/h·m²"]],
-      def: (p, r) => ({ type: "D9", aor: r ? +r.aor.maxH.toFixed(2) : 149.27, area: r ? +r.dim.A.toFixed(1) : 428.4, sub: r ? +r.aer.sub.toFixed(3) : 5.33, qTarget: p.qDiffMax,
+      def: (p, r) => ({ type: "D9", method: p.aerMethod || "FINE", aor: r ? +r.aor.maxH.toFixed(2) : 149.27, area: r ? +r.dim.A.toFixed(1) : 428.4, sub: r ? +r.aer.sub.toFixed(3) : 5.33, qTarget: p.qDiffMax,
         alpha: p.alpha, beta: p.beta, T: p.Tmax, DO: p.DO, alt: p.alt, mix: p.mixSBR }),
       run: (v) => { const o = TOOLS.aeration(v), d = TOOLS.DIFFUSERS[v.type];
         return [["AOR/SOR", o.ratio, 3, "-", info([`SOR = AOR ÷ ${fmtN(o.ratio, 3)}; hệ số = α·F·θ^(T−20)·(β·Cs,T,H − DO)/Cs,20`, `SOR = AOR ÷ ${fmtE(o.ratio, 3)}; factor = α·F·θ^(T−20)·(β·Cs,T,H − DO)/Cs,20`],
@@ -12537,70 +12557,155 @@ section.sheet.wide { grid-column: 1 / -1; }
       def: () => ({ H: 4, Ls: 10, Lf: 2, Ws: 10, Wf: 2 }),
       run: (v) => { const o = TOOLS.hopper(v); return [["Diện tích mặt nước", o.As, 2, "m²"], ["Diện tích đáy", o.Af, 2, "m²"], ["Thể tích", o.V, 2, "m³"]]; } },
     // ---------------- Cấp khí theo handbook (Xylem/Sanitaire diffuser data) ----------------
-    { id: "aer-cmp", t: "So sánh phương án cấp khí", d: "So sánh nhiều phương án cấp khí (khí bọt mịn, khí thô, khuấy bề mặt, truyềnhaft) theo tiêu thụ điện, SOTE, diện tích phủ và Ứng dụng. Mỗi phương án một hàng: công suất máy thổi kW, điện kWh/ngày, SOTE phần trăm, đánh giá ưu/nhược và khuyến cáo theo cấu hình bể (ICEAS / SBR theo mẻ / thải thải công nghiệp).",
-      f: [["method", "Phương án cấp khí", "", "dtype"], ["Qn", "Tổng lưu lượng khí", "Nm³/h"], ["depth", "Độ sâu nước trên đĩa", "m"], ["airPerDisc", "Khí mỗi đĩa mục tiêu", "Nm³/h"], ["area", "Diện tích bể được cấp khí", "m²"], ["hours", "Thời gian sục khí mỗi ngày", "h/ngày"], ["elec", "Giá điện", "VND/kWh"], ["discType", "Loại đĩa", "", "dtype"]],
-      def: (p, r) => ({ method: "FINE", Qn: r ? Math.round(r.aer.air) : 3200, depth: r ? +r.dep.mad.toFixed(2) : 5.5, airPerDisc: r ? +r.aer.qDiff.toFixed(2) : 4.04, area: r ? +r.dim.A.toFixed(1) : 428.4, hours: r ? Math.max(1, Math.round((r.cyc.aerMin || 0) * r.cyc.nCyc / 60)) : 12, elec: 3000, discType: "D9" }),
+    { id: "aer-cmp", t: "So sánh phương án cấp khí", d: "So sánh song song 4 phương án cấp khí (khí bọt mịn, khí thô, khuấy bề mặt, truyềnhaft) theo tiêu thụ điện, SOTE, diện tích phủ và ứng dụng. Mỗi cột là một phương án: công suất máy thổi kW, điện kWh/ngày, SOTE, đánh giá ưu/nhược, khuyến cáo theo cấu hình bể (ICEAS / SBR theo mẻ / thải công nghiệp).",
+      f: [["Qn", "Tổng lưu lượng khí", "Nm³/h"], ["depth", "Độ sâu nước trên đĩa", "m"], ["airPerDisc", "Khí mỗi đĩa mục tiêu", "Nm³/h"], ["area", "Diện tích bể được cấp khí", "m²"], ["hours", "Thời gian sục khí mỗi ngày", "h/ngày"], ["elec", "Giá điện", "VND/kWh"], ["discType", "Loại đĩa", "", "dtype"]],
+      def: (p, r) => ({ Qn: r ? Math.round(r.aer.air) : 3200, depth: r ? +r.dep.mad.toFixed(2) : 5.5, airPerDisc: r ? +r.aer.qDiff.toFixed(2) : 4.04, area: r ? +r.dim.A.toFixed(1) : 428.4, hours: r ? Math.max(1, Math.round((r.cyc.aerMin || 0) * r.cyc.nCyc / 60)) : 12, elec: 3000, discType: "D9" }),
       run: (v) => {
-        const methods = [
-          { id: "FINE", vi: "Khí bọt mịn (fine-bubble disc)", en: "Fine-bubble disc aeration", kw: 0.55, sote: 12, pros: "SOTE cao, điện ít, bùn lắng ít, hiện đại nhất cho ICEAS/SBR", cons: "Chi phí đầu tư cao, dễ tắc nếu nước thải chưa xử lý trước", use: "ICEAS, SBR theo mẻ, xử lý hiện đại" },
-          { id: "COARSE", vi: "Khí thô (coarse-bubble)", en: "Coarse-bubble aeration", kw: 0.9, sote: 6, pros: "Không tắc, rẻ, bảo trì dễ", cons: "SOTE thấp, điện nhiều, khuấy trộn kém ở đầy nông", use: "Khu chọn (selector), bể thải thải công nghiệp dầu mỡ" },
-          { id: "SURFACE", vi: "Khuấy bề mặt (surface aerator)", en: "Surface mechanical aeration", kw: 1.2, sote: 2.5, pros: "Cấu trúc đơn giản, không cần ống thổi riêng, khuấy trộn tốt", cons: "SOTE rất thấp, tiếng ồn lớn, không hạn chế được nitrat hóa sâu", use: "Bể před-thověn, khu chọn, khu vực điện giá thấp" },
-          { id: "JET", vi: "Truyềnhaft (jet aerator)", en: "Jet aeration", kw: 1.0, sote: 8, pros: "Khuấy trộn mạnh, không cần máy thổi riêng", cons: "Đầu tư cao, bảo trì dưới nước khó", use: "Bể sâu, không gian ít, cần khuấy trộn cường độ cao" },
-        ];
-        const m = methods.find((x) => x.id === v.method) || methods[0];
-        const kW = v.Qn * m.kw / 1000;   // heuristic kW per 1000 Nm³/h scaled by method factor
-        const kWh = kW * v.hours;
-        const cost = kWh * v.elec / 1000;
-        const co2 = kWh * 0.75 / 1000;
+        const cmp = Object.entries(AER_METHODS).map(([key, m]) => {
+          const kW = v.Qn * m.kw / 1000;
+          const kWh = kW * v.hours;
+          const cost = kWh * v.elec / 1000;
+          const co2 = kWh * 0.75 / 1000;
+          const nDisc = v.airPerDisc > 0 ? Math.ceil(v.Qn / v.airPerDisc) : 0;
+          const cover = nDisc * (v.discType ? (TOOLS.DIFFUSERS[v.discType] || {}).a : 0) || 0;
+          const coverPct = v.area > 0 ? (cover / v.area * 100) : 0;
+          return { key, m, kW, kWh, cost, co2, nDisc, coverPct };
+        });
+        const best = cmp.reduce((b, c) => c.kWh < b.kWh ? c : b, cmp[0]);
+        const head = `<tr><th>${bi("Tiêu chí", "Criterion")}</th>` + cmp.map((c) => `<th style="text-align:center">${bi(c.m.vi, c.m.en)}${c === best ? ` · ${bi("tiên tiến", "best")}` : ""}</th>`).join("") + "</tr>";
+        const row = (label, fn, unit, src) => `<tr><td>${label}</td>` + cmp.map((c) => `<td style="text-align:center">${fn(c)}${unit ? `<span class="u"> ${unit}</span>` : ""}</td>`).join("") + `<td class="u" style="font-size:11px">${src || ""}</td></tr>`;
         const rows = [
-          [bi("Phương án", "Option") + " · " + bi(m.vi, m.en), null, 0, "", { ok: undefined, why: [bi("Loại", "Type:"), ""], rec: [bi(m.use, m.use), ""], src: [bi("Handbook", "Handbook"), ""] }],
-          [bi("Công suất máy thổi", "Blower power"), +kW.toFixed(2), 2, "kW", { ok: undefined, rec: [bi(`${fmtN(kW, 2)} kW`, `${fmtE(kW, 2)} kW`), ""], src: [bi("≈ theo handbook", "≈ handbook basis"), ""] }],
-          [bi("Tiêu thụ điện", "Power consumption"), +kWh.toFixed(1), 1, "kWh/ngày", { ok: undefined, rec: [bi(`${fmtN(kWh, 0)} kWh/ngày ≈ ${fmtN(cost, 0)} VND/ngày ≈ ${fmtN(co2, 1)} tCO2e/ngày`, `${fmtE(kWh, 0)} kWh/d ≈ ${fmtE(cost, 0)} VND/d ≈ ${fmtE(co2, 1)} tCO2e/d`), ""], src: [bi("kW × giờ sục × giá điện", "kW × aeration hours × tariff"), ""] }],
-          [bi("SOTE ước tính", "Estimated SOTE"), m.sote, 1, "%", { ok: undefined, rec: [bi(`${m.sote} %`, `${m.sote} %`), ""], src: [bi("Sổ tay cấp khí", "Aeration handbook"), ""] }],
-          [bi("Ưu điểm", "Pros"), null, 0, "", { ok: undefined, rec: [bi(m.pros, m.pros), ""], src: [bi("Handbook", "Handbook"), ""] }],
-          [bi("Nhược điểm", "Cons"), null, 0, "", { ok: undefined, rec: [bi(m.cons, m.cons), ""], src: [bi("Handbook", "Handbook"), ""] }],
-          [bi("Ứng dụng khuyến cáo", "Recommended application"), null, 0, "", { ok: undefined, rec: [bi("Phù hợp: " + m.use, "Suited for: " + m.use), ""], src: [bi("Cấu hình bể đang chọn", "Current tank configuration"), ""] }],
+          row(bi("Công suất máy thổi", "Blower power"), c => +c.kW.toFixed(2), "kW", bi("≈ theo handbook", "≈ handbook basis")),
+          row(bi("Tiêu thụ điện", "Power consumption"), c => +c.kWh.toFixed(1), "kWh/ngày", bi("kW × giờ sục × giá điện", "kW × aeration hours × tariff")),
+          row(bi("Chi phí điện", "Power cost"), c => `${+c.cost.toFixed(0)}`, "VND/ngày", bi("giá điện nhập ở trên", "tariff entered above")),
+          row(bi("SOTE ước tính", "Estimated SOTE"), c => `${c.m.sote} %`, "%", bi("Sổ tay cấp khí", "Aeration handbook")),
+          row(bi("Số đĩa (theo lưu lượng mục tiêu)", "Discs (per target air/disc)"), c => c.nDisc, "đĩa", bi("Qn ÷ khí mỗi đĩa mục tiêu", "Qn ÷ air per disc target")),
+          row(bi("Diện tích phủ thô", "Rough disc coverage"), c => `${c.coverPct.toFixed(1)} %`, "%", bi("số đĩa × diện tích 1 đĩa", "disc count × disc area")),
+          row(bi("Ưu điểm", "Pros"), c => bi(c.m.pros, c.m.pros), null, bi("Handbook", "Handbook")),
+          row(bi("Nhược điểm", "Cons"), c => bi(c.m.cons, c.m.cons), null, bi("Handbook", "Handbook")),
+          row(bi("Ứng dụng khuyến cáo", "Recommended application"), c => bi("Phù hợp: " + c.m.use, "Suited for: " + c.m.use), null, bi("Cấu hình bể đang chọn", "Current tank configuration")),
         ];
-        return rows;
+        return [[bi("So sánh phương án cấp khí", "Aeration method comparison"), null, 0, "", { ok: undefined, rec: [bi(`<table class="tchk"><thead>${head}</thead><tbody>${rows.map(r => r).join("")}</tbody></table>`, `<table class="tchk"><thead>${head}</thead><tbody>${rows.map(r => r).join("")}</tbody></table>`), ""], src: [bi("AER_METHODS / handbook data", "AER_METHODS / handbook data"), ""] }]];
       } },
-    { id: "aer-layout", t: "Bản vẽ bố trí cấp khí", d: "Vẽ sơ đồ bể, ống nhánh (header) chạy dọc chiều dài, đĩa phân phối khí đều verteilt, đánh dấu vị trí máy thổi và máng thu. Dùng cho PFD và bản vẽ CAD tham khảo.",
-      f: [["L", "Chiều dài bể", "m"], ["W", "Chiều rộng bể", "m"], ["nGrid", "Số lưới", "lưới"], ["nDiff", "Tổng số đĩa", "đĩa"], ["clrEnd", "Khoảng hở hai đầu lưới", "m"], ["clrSide", "Khoảng hở sát tường", "m"], ["hdrMin", "Khoảng cách ống nhánh tối thiểu", "m"], ["discMin", "Khoảng cách đĩa tối thiểu", "m"]],
-      def: (p, r) => ({ L: r ? +(r.dim.L - (p.fill === "BATCH" ? 0 : p.Lpre + p.wall)).toFixed(2) : 31.7, W: r ? r.dim.W : 12, nGrid: 2, nDiff: r ? r.aer.nDiff : 792, clrEnd: 0.3, clrSide: 0.3, hdrMin: 0.6, discMin: 0.3 }),
+    { id: "aer-layout", t: "Bản vẽ bố trí cấp khí", d: "Vẽ sơ đồ bể, ống nhánh (header) chạy dọc chiều dài, đĩa phân phối khí, đánh dấu vị trí máy thổi và máng thu. Dùng cho PFD và bản vẽ CAD tham khảo. Có nhiều phương án bố trí cho mỗi loại cấp khí (chân lưới, giữa bể, hai đầu, trộn hỗn hợp).",
+      f: [["layout", "Phương án bố trí", "", "layout"], ["L", "Chiều dài bể", "m"], ["W", "Chiều rộng bể", "m"], ["nGrid", "Số lưới", "lưới"], ["nDiff", "Tổng số đĩa", "đĩa"], ["clrEnd", "Khoảng hở hai đầu lưới", "m"], ["clrSide", "Khoảng hở sát tường", "m"], ["hdrMin", "Khoảng cách ống nhánh tối thiểu", "m"], ["discMin", "Khoảng cách đĩa tối thiểu", "m"]],
+      def: (p, r) => ({ layout: "STD", L: r ? +(r.dim.L - (p.fill === "BATCH" ? 0 : p.Lpre + p.wall)).toFixed(2) : 31.7, W: r ? r.dim.W : 12, nGrid: 2, nDiff: r ? r.aer.nDiff : 792, clrEnd: 0.3, clrSide: 0.3, hdrMin: 0.6, discMin: 0.3 }),
       run: (v) => {
         const o = TOOLS.grid(v);
         if (!o.ok) return [[o.msg, null, 0, ""]];
-        // SVG: tank rectangle, headers along L, discs as small circles
-        const pad = 40, scaleW = 700 / Math.max(v.W, 1), scaleL = 560 / Math.max(v.L, 1);
-        const cx = pad, cy = pad;
-        const wPx = v.W * scaleW, lPx = v.L * scaleL;
-        let discs = "";
+        // SVG: tank rectangle, headers along L (horizontal), discs as small circles
+        const pad = 40;
+        const scL = 700 / Math.max(v.L, 1);   // L → horizontal screen px/m
+        const scW = 400 / Math.max(v.W, 1);   // W → vertical screen px/m
+        const ox = pad, oy = pad;
+        const PW = v.L * scL;   // tank screen width = L
+        const PH = v.W * scW;   // tank screen height = W
         const perGrid = Math.ceil(v.nDiff / v.nGrid);
         const hs = o.hdrSpacing, ds = o.discSpacing;
-        for (let g = 0; g < v.nGrid; g++) {
-          const gx = cx + (g * hs + hs / 2) * scaleL;
-          for (let k = 0; k < perGrid; k++) {
-            const x = gx + (k * ds) * scaleL;
-            if (x - cx > lPx) continue;
-            for (let s = 0; s < o.hdrPerGrid; s++) {
-              const y = cy + (s * hs) * scaleW;
-              if (y - cy > wPx) continue;
-              discs += `<circle cx="${x}" cy="${y}" r="3" fill="#0f6e8c" opacity="0.85"/>`;
+        const layoutOpts = {
+          STD:  { vi: "Chân lưới",            en: "Grid – discs across the whole floor" },
+          MID:  { vi: "Giữa bể",              en: "Mid-basin – discs centred, no discs near the walls" },
+          END:  { vi: "Hai đầu bể",           en: "End zones – discs clustered at inlet and outlet ends" },
+          MIX:  { vi: "Trộn hỗn hợp",         en: "Mixed – grid + two end banks for COARSE/JET" },
+        };
+        const layoutKey = layoutOpts[v.layout] ? v.layout : "STD";
+        const noteLay = (key) => {
+          const n = layoutOpts[key]; return n ? `${n.vi} · ${n.en}` : "";
+        };
+        // Disc coordinates (x along L from left, y along W) for each layout key
+        let discs = [];
+        if (layoutKey === "STD") {
+          for (let g = 0; g < v.nGrid; g++) {
+            const gx = ox + (g * hs + hs / 2) * scL;
+            for (let k = 0; k < perGrid; k++) {
+              const x = gx + (k * ds) * scL;
+              if (x - ox > PW) continue;
+              for (let s = 0; s < o.hdrPerGrid; s++) {
+                const y = oy + (s * hs) * scW;
+                if (y - oy > PH) continue;
+                discs.push({ x, y });
+              }
             }
           }
+        } else if (layoutKey === "MID") {
+          const x0 = ox + v.clrEnd * scL, x1 = ox + (v.L - v.clrEnd) * scL;
+          const y0 = oy + v.clrSide * scW, y1 = oy + (v.W - v.clrSide) * scW;
+          const nx = Math.max(1, Math.round((x1 - x0) / (ds * scL))), ny = Math.max(1, Math.round((y1 - y0) / (hs * scW)));
+          const kx = (x1 - x0) / Math.max(nx, 1), ky = (y1 - y0) / Math.max(ny, 1);
+          for (let i = 0; i < nx && discs.length < v.nDiff; i++) for (let j = 0; j < ny && discs.length < v.nDiff; j++) discs.push({ x: x0 + i * kx + kx / 2, y: y0 + j * ky + ky / 2 });
+        } else if (layoutKey === "END") {
+          const bw = Math.min(v.clrEnd * 3, v.L / 4);
+          const xbands = [[ox, ox + bw * scL], [ox + (v.L - bw) * scL, ox + v.L * scL]];
+          const ybands = [[oy, oy + v.W * scW]];
+          for (const [xa, xb] of xbands) for (const [ya, yb] of ybands) {
+            const nx = Math.max(1, Math.round((xb - xa) / (ds * scL))), ny = Math.max(1, Math.round((yb - ya) / (hs * scW)));
+            const kx = (xb - xa) / Math.max(nx, 1), ky = (yb - ya) / Math.max(ny, 1);
+            for (let i = 0; i < nx && discs.length < v.nDiff; i++) for (let j = 0; j < ny && discs.length < v.nDiff; j++) discs.push({ x: xa + i * kx + kx / 2, y: ya + j * ky + ky / 2 });
+          }
+        } else { // MIX: grid across most of floor + two dense end banks for COARSE/JET
+          const midEnd = Math.min(v.clrEnd * 2, v.L / 5);
+          const mx = ox + midEnd * scL;
+          for (let g = 0; g < v.nGrid; g++) {
+            const gx = ox + (g * hs + hs / 2) * scL;
+            for (let k = 0; k < perGrid; k++) {
+              const x = gx + (k * ds) * scL;
+              if (x - ox > PW || x < mx || x - ox > PW - midEnd * scL) continue;
+              for (let s = 0; s < o.hdrPerGrid; s++) {
+                const y = oy + (s * hs) * scW;
+                if (y - oy > PH) continue;
+                discs.push({ x, y });
+              }
+            }
+          }
+          const bankN = Math.max(1, Math.ceil((v.nDiff - discs.length) / 2));
+          const bw2 = Math.min(v.clrEnd * 2.5, v.L / 6);
+          const bands = [[ox, ox + bw2 * scL], [ox + (v.L - bw2) * scL, ox + v.L * scL]];
+          for (const [xa, xb] of bands) {
+            const nx = Math.max(1, Math.round((xb - xa) / (ds * scL))), ny = Math.max(1, Math.round(PH / (hs * scW)));
+            const kx = (xb - xa) / Math.max(nx, 1), ky = PH / Math.max(ny, 1);
+            for (let i = 0; i < nx && discs.length < v.nDiff; i++) for (let j = 0; j < ny && discs.length < v.nDiff; j++) discs.push({ x: xa + i * kx + kx / 2, y: oy + j * ky + ky / 2 });
+          }
         }
-        const svg = `<svg width="780" height="340" viewBox="0 0 780 340" xmlns="http://www.w3.org/2000/svg">
-          <rect x="${cx}" y="${cy}" width="${wPx}" height="${lPx}" fill="none" stroke="#14232b" stroke-width="2"/>
-          <text x="${cx + wPx/2}" y="${cy - 10}" text-anchor="middle" font="13px monospace" fill="#14232b">${bi("Bể cấp khí", "Aeration basin")} ${fmtN(v.L,1)} × ${fmtN(v.W,1)} m · ${v.nDiff} đĩa · ${v.nGrid} lưới</text>
-          ${discs}
-          <text x="${cx + wPx/2}" y="${cy + lPx + 22}" text-anchor="middle" font="12px" fill="#5b6d76">${bi("Ống nhánh dọc chiều dài bể; đĩa phân phối khí (xanh). Vị trí máy thổi: ngay trước đầu ống nhánh.", "Header pipes run along the basin length; discs (blue). Blower at the header inlet.")}</text>
+        // render discs
+        let discsSvg = "";
+        for (const d of discs) discsSvg += `<circle cx="${d.x}" cy="${d.y}" r="2.6" fill="#0f6e8c" opacity="0.85"/>`;
+        // header lines along L (horizontal across tank)
+        let hdrs = "";
+        for (let g = 0; g < v.nGrid; g++) {
+          const y = oy + (g * hs + hs / 2) * scW;
+          hdrs += `<line x1="${ox}" y1="${y}" x2="${ox + PW}" y2="${y}" class="hdr"/>`;
+        }
+        // blower markers along left edge of tank (spaced vertically, not overlapping)
+        let blowers = "";
+        const nBlow = Math.min(v.nGrid * o.hdrPerGrid, 6);
+        for (let i = 0; i < nBlow; i++) {
+          const by = oy + PH / 2 - 40 + i * 28;
+          blowers += `<rect x="${ox - 24}" y="${by - 7}" width="16" height="14" fill="#b03a2e" rx="2"/><text x="${ox - 16}" y="${by + 4}" text-anchor="middle" font="10px" fill="#fff" data-bi="1">MB</text>`;
+        }
+        // decanter at outlet end (right side of tank)
+        const decX = ox + PW + 10;
+        const svg = `<svg viewBox="0 0 900 ${oy + PH + 220}" class="layout" xmlns="http://www.w3.org/2000/svg">
+          <rect x="${ox}" y="${oy}" width="${PW}" height="${PH}" class="tankp"/>
+          ${hdrs}
+          ${discsSvg}
+          ${blowers}
+          <rect x="${decX - 14}" y="${oy + PH/2 - 10}" width="28" height="20" class="dec"/>
+          <text x="${decX}" y="${oy + PH/2 + 4}" text-anchor="middle" font="11px" fill="#fff" data-bi="1">DC</text>
+          ${svgBi(ox + PW/2, oy - 14, `Bể cấp khí ${fmtN(v.L,1)} × ${fmtN(v.W,1)} m · ${v.nDiff} đĩa · ${v.nGrid} lưới`, `Aeration basin ${fmtE(v.L,1)} × ${fmtE(v.W,1)} m · ${fmtE(v.nDiff,0)} discs · ${fmtE(v.nGrid,0)} grids`, 'text-anchor="middle" class="ax"', 13)}
+          ${svgBi(ox + PW/2, oy + PH + 30, "Ống nhánh chạy dọc chiều dài bể; đĩa phân phối khí (xanh). MB: máy thổi; DC: máng thu nước.", "Headers along basin length; discs (blue). MB: blower; DC: decanter.", 'text-anchor="middle" class="ax"', 11)}
+          ${svgBi(ox + PW/2, oy + PH + 50, "Phương án: " + noteLay(layoutKey), "Layout: " + noteLay(layoutKey), 'text-anchor="middle" class="ax"', 10)}
+          <line x1="${ox}" y1="${oy + PH + 16}" x2="${ox + PW}" y2="${oy + PH + 16}" class="dim"/>
+          <text x="${ox + PW/2}" y="${oy + PH + 32}" text-anchor="middle" class="ax">L = ${fmtN(v.L, 1)} m</text>
+          <line x1="${ox + PW + 16}" y1="${oy}" x2="${ox + PW + 16}" y2="${oy + PH}" class="dim"/>
+          <text x="${ox + PW + 24}" y="${oy + PH/2 + 4}" class="ax">W = ${fmtN(v.W, 1)} m</text>
         </svg>`;
         return [
           [bi("Số ống nhánh mỗi lưới", "Headers per grid"), o.hdrPerGrid, 0, "ống", { ok: true, rec: [bi(o.hdrPerGrid + " ống nhánh", o.hdrPerGrid + " headers"), ""], src: [bi("Bố trí lưới", "Grid layout"), ""] }],
           [bi("Số đĩa mỗi lưới", "Discs per grid"), o.discPerGrid, 0, "đĩa", { ok: true, rec: [bi(fmtN(o.discPerGrid, 0) + " đĩa", fmtE(o.discPerGrid, 0) + " discs"), ""], src: [bi("Grid layout", "Grid layout"), ""] }],
-          [bi("Tổng số đĩa bố trí", "Total discs laid out"), o.total, 0, "đĩa", { ok: o.total >= v.nDiff, rec: [bi(fmtN(o.total, 0) + " ≥ " + fmtN(v.nDiff, 0) + " cần", fmtE(o.total, 0) + " ≥ " + fmtE(v.nDiff, 0) + " required"), ""], src: [bi("Grid layout", "Grid layout"), ""] }],
+          [bi("Tổng số đĩa bố trí", "Total discs laid out"), discs.length, 0, "đĩa", { ok: discs.length >= v.nDiff, rec: [bi(fmtN(discs.length, 0) + " ≥ " + fmtN(v.nDiff, 0) + " cần", fmtE(discs.length, 0) + " ≥ " + fmtE(v.nDiff, 0) + " required"), ""], src: [bi("Bố trí cấp khí", "Aeration layout"), ""] }],
           [bi("Khoảng cách ống nhánh", "Header spacing"), o.hdrSpacing * 1000, 0, "mm", { ok: true, rec: [bi(fmtN(o.hdrSpacing * 1000, 0) + " mm", fmtE(o.hdrSpacing * 1000, 0) + " mm"), ""], src: [bi("≈ 3 × khoảng cách đĩa", "≈ 3 × disc spacing"), ""] }],
           [bi("Khoảng cách đĩa", "Disc spacing"), o.discSpacing * 1000, 0, "mm", { ok: true, rec: [bi(fmtN(o.discSpacing * 1000, 0) + " mm", fmtE(o.discSpacing * 1000, 0) + " mm"), ""], src: [bi("≥ khoảng cách tối thiểu nhập", "≥ minimum entered"), ""] }],
-          [bi("Bản vẽ bố trí", "Layout drawing"), null, 0, "", { ok: undefined, rec: [bi(svg, svg), ""], src: [bi("PFD / CAD tham khảo", "PFD / CAD reference"), ""] }],
+          [bi("Bản vẽ bố trí", "Layout drawing"), null, 0, "", { ok: undefined, rec: [svg, ""], src: [bi("PFD / CAD tham khảo", "PFD / CAD reference"), ""] }],
         ];
       } },
     { id: "aer-out", t: "Xuất báo cáo cấp khí", d: "Nút xuất bảng Excel tính toán (công thức sống), PFD (trực tuyến), bản vẽ CAD (SVG/DXF tham khảo) và Doc (tóm tắt phương án, tiêu thụ điện, ưu nhược, khuyến cáo).",
@@ -12637,10 +12742,20 @@ section.sheet.wide { grid-column: 1 / -1; }
         const vals = Object.assign(toolDefaults(t), toolVals[t.id] || {});
         const fields = t.f.map(([k, lab, unit, type]) => {
           const id = `tl-${t.id}-${k}`;
-          const ctl = type === "dtype"
-            ? `<select id="${id}">${Object.entries(TOOLS.DIFFUSERS).map(([key, d]) => `<option value="${key}"${vals[k] === key ? " selected" : ""}>${d.name}</option>`).join("")}</select>`
-            : `<input id="${id}" type="number" step="any" value="${vals[k]}">`;
-          return `<div class="f${type === "dtype" ? " wide" : ""}"><label for="${id}">${lab}</label>${ctl}${type === "dtype" ? "" : `<span class="u">${unit}</span>`}</div>`;
+          let ctl, cls = "";
+          if (type === "dtype") {
+            cls = " wide";
+            ctl = `<select id="${id}">${Object.entries(TOOLS.DIFFUSERS).map(([key, d]) => `<option value="${key}"${vals[k] === key ? " selected" : ""}>${d.name}</option>`).join("")}</select>`;
+          } else if (type === "dmtype") {
+            cls = " wide";
+            ctl = `<select id="${id}">${Object.entries(AER_METHODS).map(([key, m]) => `<option value="${key}"${vals[k] === key ? " selected" : ""}>${m.vi}</option>`).join("")}</select>`;
+          } else if (type === "layout") {
+            cls = " wide";
+            ctl = `<select id="${id}">` + SEL.layout.map(([k, lab]) => `<option value="${k}"${vals[k] === k ? " selected" : ""}>${lab}</option>`).join("") + `</select>`;
+          } else {
+            ctl = `<input id="${id}" type="number" step="any" value="${vals[k]}">`;
+          }
+          return `<div class="f${cls}"><label for="${id}">${lab}</label>${ctl}${type === "dtype" || type === "dmtype" ? "" : `<span class="u">${unit}</span>`}</div>`;
         }).join("");
         return `<div class="card" data-tool="${t.id}"><h3>${t.t}</h3><div class="fields">${fields}</div><p class="hint">${t.d}</p>` +
           `<div class="btns" style="padding:0 14px 10px"><button type="button" data-fill="${t.id}">Lấy từ thiết kế</button></div><div class="tbl" id="out-${t.id}"></div></div>`;
@@ -12665,10 +12780,20 @@ section.sheet.wide { grid-column: 1 / -1; }
         const vals = Object.assign(toolDefaults(t), toolVals[t.id] || {});
         const fields = t.f.map(([k, lab, unit, type]) => {
           const id = `tl-${t.id}-${k}`;
-          const ctl = type === "dtype"
-            ? `<select id="${id}">${Object.entries(TOOLS.DIFFUSERS).map(([key, d]) => `<option value="${key}"${vals[k] === key ? " selected" : ""}>${d.name}</option>`).join("")}</select>`
-            : `<input id="${id}" type="number" step="any" value="${vals[k]}">`;
-          return `<div class="f${type === "dtype" ? " wide" : ""}"><label for="${id}">${lab}</label>${ctl}${type === "dtype" ? "" : `<span class="u">${unit}</span>`}</div>`;
+          let ctl, cls = "";
+          if (type === "dtype") {
+            cls = " wide";
+            ctl = `<select id="${id}">${Object.entries(TOOLS.DIFFUSERS).map(([key, d]) => `<option value="${key}"${vals[k] === key ? " selected" : ""}>${d.name}</option>`).join("")}</select>`;
+          } else if (type === "dmtype") {
+            cls = " wide";
+            ctl = `<select id="${id}">${Object.entries(AER_METHODS).map(([key, m]) => `<option value="${key}"${vals[k] === key ? " selected" : ""}>${m.vi}</option>`).join("")}</select>`;
+          } else if (type === "layout") {
+            cls = " wide";
+            ctl = `<select id="${id}">` + SEL.layout.map(([k, lab]) => `<option value="${k}"${vals[k] === k ? " selected" : ""}>${lab}</option>`).join("") + `</select>`;
+          } else {
+            ctl = `<input id="${id}" type="number" step="any" value="${vals[k]}">`;
+          }
+          return `<div class="f${cls}"><label for="${id}">${lab}</label>${ctl}${type === "dtype" || type === "dmtype" ? "" : `<span class="u">${unit}</span>`}</div>`;
         }).join("");
         return `<div class="card" data-tool="${t.id}"><h3>${t.t}</h3><div class="fields">${fields}</div><p class="hint">${t.d}</p>` +
           `<div class="btns" style="padding:0 14px 10px"><button type="button" data-fill="${t.id}">Lấy từ thiết kế</button></div><div class="tbl" id="out-${t.id}"></div></div>`;
@@ -12680,7 +12805,7 @@ section.sheet.wide { grid-column: 1 / -1; }
     const vals = {};
     for (const [k, , , type] of t.f) {
       const el = document.getElementById(`tl-${t.id}-${k}`);
-      vals[k] = type === "dtype" ? el.value : parseFloat(el.value);
+      vals[k] = type === "dtype" || type === "dmtype" || type === "layout" ? el.value : parseFloat(el.value);
     }
     toolVals[t.id] = vals;
     try { localStorage.setItem("iceas-tools", JSON.stringify(toolVals)); } catch (e) {}
@@ -12692,7 +12817,7 @@ section.sheet.wide { grid-column: 1 / -1; }
       `<th>${bi("Đơn vị", "Unit")}</th><th>${bi("Khuyến cáo · căn cứ", "Recommended · basis")}</th></tr></thead><tbody>` + rows.map(([lab, v, d, u, c]) =>
       `<tr class="key"><td>${lab}${c ? pill(c) : ""}${c ? `<div class="why ${c.ok === false ? "bad" : c.ok === undefined ? "info" : ""}">${bi(c.why ? c.why[0] : "", c.why ? c.why[1] : "")}</div>` : ""}</td>` +
       `<td class="n">${v === null ? "" : fmtN(v, d)}</td><td class="u">${u}</td>` +
-      `<td class="rec">${c ? `<b>${bi(c.rec[0], c.rec[1])}</b>${c.src ? `<div class="src">${bi(c.src[0], c.src[1])}</div>` : ""}` +
+      `<td class="rec">${c ? `<b>${c.rec && /^\s*<svg/.test(c.rec[0]) ? c.rec[0] : bi(c.rec[0], c.rec[1])}</b>${c.src ? `<div class="src">${bi(c.src[0], c.src[1])}</div>` : ""}` +
         (c.act && c.act.length ? `<div class="acts">${c.act.map((a) => `<button type="button" class="apply" data-tlset="${t.id}|nDec|${a.n}">${bi(a.vi, a.en)}</button>`).join("")}</div>` : "") : ""}</td></tr>`).join("") + `</tbody></table>`;
     biPass(document.getElementById("out-" + t.id));
   }
@@ -12791,7 +12916,25 @@ section.sheet.wide { grid-column: 1 / -1; }
   function onInput(ev) {
     const t = ev.target;
     if (t.id && t.id.startsWith("adj-")) { if (ev.type === "change") onAdj(t); return; }
-    if (t.id && t.id.startsWith("tl-")) { const tool = TOOL_DEFS.find((x) => x.id === t.id.split("-")[1]); if (tool) runTool(tool); return; }
+    if (t.id && t.id.startsWith("tl-")) {
+      const tool = TOOL_DEFS.find((x) => x.id === t.id.slice(3).split("-")[0]);
+      if (tool) {
+        // chọn phương án cấp khí → tự điền hệ số tham chiếu từ AER_METHODS
+        if (tool.id === "aer" && t.id.endsWith("-method")) {
+          const m = AER_METHODS[t.value];
+          if (m) {
+            const fill = { alpha: m.alpha, beta: m.beta, qTarget: m.qDiffMax, mix: m.mixSBR };
+            for (const [k, val] of Object.entries(fill)) {
+              const el = document.getElementById(`tl-aer-${k}`);
+              if (el && val != null) el.value = val;
+            }
+            toast(`Phương án cấp khí: ${m.vi}`, `Aeration method: ${m.en}`);
+          }
+        }
+        runTool(tool);
+      }
+      return;
+    }
     if (!t.id || !t.id.startsWith("in-")) return;
     const key = t.id.slice(3);
     // carbon-footprint inputs only refresh the footprint; they never invalidate the design steps
@@ -12804,6 +12947,7 @@ section.sheet.wide { grid-column: 1 / -1; }
     else if (t.tagName === "SELECT" || t.type === "text") state[key] = t.value;
     else { const v = parseFloat(t.value); state[key] = isFinite(v) ? v : null; }
     if (key === "kin" && state.kin === "CUSTOM") for (const k of KIN_KEYS) state[k] = E.KINETICS.XYLEM[k];
+    if (key === "aerMethod") { const m = AER_METHODS[t.value]; Object.assign(state, { alpha: m.alpha, beta: m.beta, sotePerM: m.sotePerM, qDiffMax: m.qDiffMax, aDiff: m.aDiff, mixSBR: m.mixSBR }); }
     // editing a step invalidates the steps after it
     const s = STEP_OF[key] ?? step;
     for (let i = s + 1; i < done.length; i++) done[i] = false;
@@ -12979,7 +13123,6 @@ section.sheet.wide { grid-column: 1 / -1; }
   document.getElementById("tMc5").addEventListener("click", () => { mode = "mc5"; try { localStorage.setItem("iceas-mode", mode); } catch (e) {} show(); });
   document.getElementById("tCf").addEventListener("click", () => { mode = "cf"; try { localStorage.setItem("iceas-mode", mode); } catch (e) {} show(); });
   document.getElementById("tMix").addEventListener("click", () => { mode = "mix"; try { localStorage.setItem("iceas-mode", mode); } catch (e) {} show(); });
-  document.getElementById("tAer").addEventListener("click", () => { mode = "aer"; try { localStorage.setItem("iceas-mode", mode); } catch (e) {} show(); });
 
   // file download: on claude.ai through the downloads capability, offline through a plain link
   async function saveBlob(filename, blob, okVi, okEn) {
@@ -13095,6 +13238,13 @@ section.sheet.wide { grid-column: 1 / -1; }
         ["Tiêu thụ điện ước tính", "", "kWh/ngày", "kW × giờ sục (tiêu chuẩn handbook)"],
         ["Ứng dụng khuyến cáo", "", "", "ICEAS / SBR theo mẻ / thải thải công nghiệp"],
         ["Bản vẽ bố trí", "", "", "Xem tab Bản vẽ bố trí cấp khí (SVG/DXF tham khảo)"],
+        ["", "", "", ""],
+        ["PHƯƠNG ÁN CẤP KHI THEO HANDBOOK", "", "", "Xylem/Sanitaire diffuser data – so sánh ưu nhược"],
+        ["Phương án", "SOTE (%)", "kW/1000 Nm³/h", "Ưu điểm / nhược điểm / ứng dụng"],
+        ["Khí bọt mịn (fine-bubble disc)", "12", "0.55", "SOTE cao, điện ít, hiện đại nhất cho ICEAS/SBR · chi phí đầu tư cao, dễ tắc nếu chưa xử lý trước"],
+        ["Khí thô (coarse-bubble)", "6", "0.90", "Không tắc, rẻ, bảo trì dễ · SOTE thấp, điện nhiều, khuấy kém ở đầy nông · khu chọn, thải thải công nghiệp"],
+        ["Khuấy bề mặt (surface aerator)", "2.5", "1.20", "Cấu trúc đơn giản, không cần ống thổi riêng, khuấy tốt · SOTE rất thấp, tiếng ồn lớn · bể tiền-thowali, khu chọn, điện giá thấp"],
+        ["Truyềnhaft (jet aerator)", "8", "1.00", "Khuấy mạnh, không cần máy thổi riêng · đầu tư cao, bảo trì dưới nước khó · bể sâu, không gian ít, khuấy cường độ cao"],
       ];
       ws.addRows(rows);
       ws.getCell("A1").font = { bold: true, size: 14 };
@@ -13172,12 +13322,12 @@ section.sheet.wide { grid-column: 1 / -1; }
         <tr><td>${bi("Ứng dụng khuyến cáo", "Recommended application")}</td><td colspan="3">${bi("ICEAS / SBR theo mẻ / thải thải công nghiệp", "ICEAS / batch SBR / industrial effluent")}</td></tr>
       </tbody></table>
       <h2>${bi("Phương án cấp khí theo handbook", "Aeration options per handbook")}</h2>
-      <ul>
-        <li><b>${bi("Khí bọt mịn (fine-bubble disc)", "Fine-bubble disc")}</b> – ${bi("SOTE cao, điện ít, hiện đại nhất cho ICEAS/SBR", "High SOTE, low power, best for ICEAS/SBR")}</li>
-        <li><b>${bi("Khí thô (coarse-bubble)", "Coarse-bubble")}</b> – ${bi("Không tắc, rẻ, bảo trì dễ; SOTE thấp", "Clog-free, cheap, easy service; low SOTE")}</li>
-        <li><b>${bi("Khuấy bề mặt (surface aerator)", "Surface mechanical")}</b> – ${bi("Đơn giản, khuấy tốt; SOTE rất thấp, tiếng ồn", "Simple, good mixing; very low SOTE, noisy")}</li>
-        <li><b>${bi("Truyềnhaft (jet aerator)", "Jet aeration")}</b> – ${bi("Khuấy mạnh, không cần máy thổi riêng; đầu tư cao", "Strong mixing, no separate blower; high capex")}</li>
-      </ul>
+      <table><thead><tr><th>${bi("Phương án", "Option")}</th><th>${bi("SOTE", "SOTE")}</th><th>${bi("kW / 1000 Nm³/h", "kW / 1000 Nm³/h")}</th><th>${bi("Ưu điểm / nhược điểm / ứng dụng", "Pros / cons / application")}</th></tr></thead><tbody>
+        <tr><td><b>${bi("Khí bọt mịn (fine-bubble disc)", "Fine-bubble disc")}</b></td><td class="n">12 %</td><td class="n">0.55</td><td>${bi("SOTE cao, điện ít, hiện đại nhất cho ICEAS/SBR · chi phí đầu tư cao, dễ tắc nếu chưa xử lý trước", "High SOTE, low power, best for ICEAS/SBR · high capex, clogs if influent not pre-treated")}</td></tr>
+        <tr><td><b>${bi("Khí thô (coarse-bubble)", "Coarse-bubble")}</b></td><td class="n">6 %</td><td class="n">0.90</td><td>${bi("Không tắc, rẻ, bảo trì dễ · SOTE thấp, điện nhiều, khuấy kém ở đầy nông · khu chọn, thải thải công nghiệp", "Clog-free, cheap, easy service · low SOTE, high power, poor mixing at low submergence · selector, industrial effluent")}</td></tr>
+        <tr><td><b>${bi("Khuấy bề mặt (surface aerator)", "Surface mechanical")}</b></td><td class="n">2.5 %</td><td class="n">1.20</td><td>${bi("Cấu trúc đơn giản, không cần ống thổi riêng, khuấy tốt · SOTE rất thấp, tiếng ồn lớn · bể tiền-thowali, khu chọn, điện giá thấp", "Simple, no separate blower piping, good mixing · very low SOTE, noisy · pre-aeration tank, selector, low power tariff areas")}</td></tr>
+        <tr><td><b>${bi("Truyềnhaft (jet aerator)", "Jet aeration")}</b></td><td class="n">8 %</td><td class="n">1.00</td><td>${bi("Khuấy mạnh, không cần máy thổi riêng · đầu tư cao, bảo trì dưới nước khó · bể sâu, không gian ít, khuấy cường độ cao", "Strong mixing, no separate blower · high capex, underwater service hard · deep tank, limited space, high-intensity mixing")}</td></tr>
+      </tbody></table>
       <p class="hint">${bi("Tham khảo: sổ tay cấp khí Xylem/Sanitaire diffuser data (Donna Li / Sanitaire Diffuser folders).", "Reference: aeration handbook – Xylem/Sanitaire diffuser data.")}</p>
       </body></html>`;
       const blob = new Blob([doc], { type: "text/html" });
