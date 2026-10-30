@@ -275,9 +275,9 @@ table.tchk td.rec table { display: table; border-collapse: collapse; width: 100%
 /* three aeration panels side by side: comparison table, layout drawing, export report */
 .aero-tools { display: flex; flex-wrap: wrap; gap: 14px; margin: 14px 0; }
 .aero-tools > section { flex: 1 1 300px; min-width: 300px; }
-/* aeration tool cards side by side (Mixer pattern) */
+/* aeration tool cards: each card on its own full-width row */
 .aero-tools-view { display: flex; flex-wrap: wrap; gap: 14px; margin: 14px 0; }
-.aero-tools-view .card { flex: 1 1 300px; min-width: 300px; }
+.aero-tools-view .card { flex: 1 1 100%; min-width: 100%; }
 /* horizontal bar chart for aeration energy comparison: shortest bar = 100% */
 .aero-chart { margin: 10px 14px 14px; border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; background: #fff; }
 .aero-chart h3 { margin: 0 0 8px; font-size: .95rem; color: var(--ink); }
@@ -370,7 +370,7 @@ section.sheet.wide { grid-column: 1 / -1; }
       <div class="sub" id="subtitle"></div>
     </div>
     <div class="btns">
-      <div class="seg" role="tablist"><button id="tDesign" type="button" role="tab">Thiết kế</button><button id="tTools" type="button" role="tab">Công cụ thiết kế</button><button id="tMc5" type="button" role="tab">Đối chiếu MC5</button><button id="tCf" type="button" role="tab">Dấu chân cacbon</button><button id="tMix" type="button" role="tab">Máy khuấy</button></div>
+      <div class="seg" role="tablist"><button id="tDesign" type="button" role="tab">Thiết kế</button><button id="tTools" type="button" role="tab">Công cụ thiết kế</button><button id="tAer" type="button" role="tab">Cấp khí</button><button id="tMc5" type="button" role="tab">Đối chiếu MC5</button><button id="tCf" type="button" role="tab">Dấu chân cacbon</button><button id="tMix" type="button" role="tab">Máy khuấy</button></div>
       <button id="bNew" type="button">Dự án mới</button>
       <select id="bLib" aria-label="Thư viện mẫu" title="Thư viện mẫu"></select>
       <button id="bRef" type="button">Ẩn cột đối chiếu</button>
@@ -11785,6 +11785,7 @@ const AER_METHODS = {
   function show() {
     document.getElementById("tDesign").className = mode === "design" ? "on" : "";
     document.getElementById("tTools").className = mode === "tools" ? "on" : "";
+    document.getElementById("tAer").className = mode === "aer" ? "on" : "";
     document.getElementById("tMc5").className = mode === "mc5" ? "on" : "";
     document.getElementById("tCf").className = mode === "cf" ? "on" : "";
     document.getElementById("tMix").className = mode === "mix" ? "on" : "";
@@ -11800,6 +11801,7 @@ const AER_METHODS = {
     }
     document.getElementById("stepper").hidden = mode !== "design";
     if (mode === "tools") { header(null); document.getElementById("subtitle").innerHTML = bi("Công cụ tính riêng: sục khí, lưới đĩa, máy thổi khí, máng thu, phèn, thể tích phễu"); toolsView(); return; }
+    if (mode === "aer") { header(null); document.getElementById("subtitle").innerHTML = bi("Cấp khí / Aeration: so sánh phương án, bản vẽ bố trí, xuất báo cáo"); aerView(); return; }
     if (mode === "mc5") { header(validate(1).e.length ? null : compute()); mc5View(); return; }
     if (mode === "cf") { header(validate(1).e.length ? null : compute()); cfView(); return; }
     const s = STEPS_()[step];
@@ -12812,7 +12814,7 @@ const AER_METHODS = {
     const v = document.getElementById("view");
     v.innerHTML = `<section class="panel"><div class="eyebrow">Công cụ thiết kế</div><h2>Các công cụ tính riêng</h2>` +
       `<p class="lead">Mỗi công cụ tính độc lập. Bấm "Lấy từ thiết kế" để điền số liệu từ phương án đang làm.</p><div class="aero-tools-view"><div class="cards" id="toolCards">` +
-      TOOL_DEFS.map((t) => {
+      TOOL_DEFS.filter((t) => !t.id.startsWith("aer-")).map((t) => {
         const vals = Object.assign(toolDefaults(t), toolVals[t.id] || {});
         const fields = t.f.map(([k, lab, unit, type]) => {
           const id = `tl-${t.id}-${k}`;
@@ -12834,7 +12836,7 @@ const AER_METHODS = {
         return `<div class="card" data-tool="${t.id}"><h3>${t.t}</h3><div class="fields">${fields}</div><p class="hint">${t.d}</p>` +
           `<div class="btns" style="padding:0 14px 10px"><button type="button" data-fill="${t.id}">Lấy từ thiết kế</button></div><div class="tbl" id="out-${t.id}"></div></div>`;
       }).join("") + `</div></div></section>`;
-    TOOL_DEFS.forEach(runTool);
+    TOOL_DEFS.filter((t) => !t.id.startsWith("aer-")).forEach(runTool);
     biPass(v);
   }
   function runTool(t) {
@@ -13168,6 +13170,7 @@ const AER_METHODS = {
   document.getElementById("bTc").addEventListener("click", () => { showTc = !showTc; try { localStorage.setItem("iceas-tc", showTc ? "1" : "0"); } catch (e) {} if (mode === "design") refresh(); else header(null); });
   document.getElementById("tDesign").addEventListener("click", () => { mode = "design"; try { localStorage.setItem("iceas-mode", mode); } catch (e) {} show(); });
   document.getElementById("tTools").addEventListener("click", () => { mode = "tools"; try { localStorage.setItem("iceas-mode", mode); } catch (e) {} show(); });
+  document.getElementById("tAer").addEventListener("click", () => { mode = "aer"; try { localStorage.setItem("iceas-mode", mode); } catch (e) {} show(); });
   document.getElementById("tMc5").addEventListener("click", () => { mode = "mc5"; try { localStorage.setItem("iceas-mode", mode); } catch (e) {} show(); });
   document.getElementById("tCf").addEventListener("click", () => { mode = "cf"; try { localStorage.setItem("iceas-mode", mode); } catch (e) {} show(); });
   document.getElementById("tMix").addEventListener("click", () => { mode = "mix"; try { localStorage.setItem("iceas-mode", mode); } catch (e) {} show(); });
