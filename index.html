@@ -275,11 +275,16 @@ table.tchk td.rec table { display: table; border-collapse: collapse; width: 100%
 /* three aeration panels side by side: comparison table, layout drawing, export report */
 .aero-tools { display: flex; flex-wrap: wrap; gap: 14px; margin: 14px 0; }
 .aero-tools > section { flex: 1 1 300px; min-width: 300px; }
-/* aeration tool cards: default 3 per row (Công cụ thiết kế tab) */
-.aero-tools-view { display: flex; flex-wrap: wrap; gap: 14px; margin: 14px 0; }
-.aero-tools-view .card { flex: 1 1 300px; min-width: 300px; }
-/* aeration tool cards: each card on its own full-width row (Cấp khí tab) */
-.aero-tools-view.aero-full .card { flex: 1 1 100%; min-width: 100%; }
+/* Công cụ thiết kế tab: fixed grid, 3 cards per row (2 rows for 6 tools); narrower screens fall back to 2 / 1 */
+.aero-tools-view { margin: 14px 0; }
+.aero-tools-view .cards { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+@media (max-width: 1180px) { .aero-tools-view .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 760px) { .aero-tools-view .cards { grid-template-columns: minmax(0, 1fr); } }
+/* Cấp khí tab: one full-width card per row, separated like the Mixer section.sheet blocks */
+.aero-tools-view.aero-full .cards { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+.aero-tools-view .card { background: var(--panel); }
+.aero-tools-view.aero-full .card .fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 360px), 1fr)); gap: 6px 20px; }
+.aero-tools-view.aero-full .card .fields .f.wide { grid-column: 1 / -1; }
 .aero-chart h3 { margin: 0 0 8px; font-size: .95rem; color: var(--ink); }
 .aero-bar { display: flex; align-items: center; gap: 10px; margin: 6px 0; font-size: .85rem; }
 .aero-bar .name { width: 96px; flex-shrink: 0; }
@@ -701,6 +706,21 @@ section.sheet.wide { grid-column: 1 / -1; }
   });
 
   Object.assign(EN, {
+    "Cấp khí": "Aeration", "Thiết kế hệ thống cấp khí theo handbook": "Aeration system design to the handbook",
+    "Mỗi phương án tính độc lập. Bấm “Lấy từ thiết kế” để điền số liệu từ phương án ICEAS đang làm.": "Each option is calculated independently. Press “Take from design” to fill in data from the current ICEAS design.",
+    "Các công cụ tính riêng": "Stand-alone calculation tools",
+    "Mỗi công cụ tính độc lập. Bấm \"Lấy từ thiết kế\" để điền số liệu từ phương án đang làm.": "Each tool is calculated independently. Press \"Take from design\" to fill in data from the current design.",
+    "Lấy từ thiết kế": "Take from design",
+    "Phương án cấp khí": "Aeration method", "Ngăn Selector": "Selector compartment",
+    "Khu chọn (Selector) của bể ICEAS: tính toán thời gian thiếu khí, điều kiện khu chọn và kết nối từ phần Selector hoặc Thiếu khí của C-Tech. Công thức lăng trụ V = H/6·(A mặt + A đáy + 4·A giữa).": "Selector zone of the ICEAS basin: anoxic time, selector conditions and link to the C-Tech Selector or Anoxic section. Prismoid formula V = H/6·(A top + A bottom + 4·A mid).",
+    "So sánh phương án cấp khí": "Aeration method comparison", "Bản vẽ bố trí cấp khí": "Aeration layout drawing", "Xuất báo cáo cấp khí": "Aeration report export",
+    "So sánh song song 4 phương án cấp khí (khí bọt mịn, khí thô, khuấy bề mặt, sục khí dạng jet) theo tiêu thụ điện, SOTE, diện tích phủ và ứng dụng. Mỗi cột là một phương án: công suất máy thổi kW, điện kWh/ngày, SOTE, đánh giá ưu/nhược, khuyến cáo theo cấu hình bể (ICEAS / SBR theo mẻ / thải công nghiệp).": "Side-by-side comparison of 4 aeration methods (fine bubble, coarse bubble, surface aerator, jet aeration) by power use, SOTE, coverage and application. Each column is one method: blower power kW, energy kWh/d, SOTE, pros/cons and a recommendation for the tank configuration (ICEAS / batch SBR / industrial).",
+    "Vẽ sơ đồ bể, ống nhánh (header) chạy dọc chiều dài, đĩa phân phối khí, đánh dấu vị trí máy thổi và máng thu. Dùng cho PFD và bản vẽ CAD tham khảo. Có nhiều phương án bố trí cho mỗi loại cấp khí (chân lưới, giữa bể, hai đầu, trộn hỗn hợp).": "Draws the tank, headers along the length, diffusers, blower and decanter positions. For PFD and reference CAD drawings. Several arrangements per aeration type (grid foot, mid-tank, both ends, mixed).",
+    "Nút xuất bảng Excel tính toán (công thức sống), PFD (trực tuyến), bản vẽ CAD (SVG/DXF tham khảo) và Doc (tóm tắt phương án, tiêu thụ điện, ưu nhược, khuyến cáo).": "Export buttons for the Excel calculation (live formulas), PFD (online), CAD drawing (reference SVG/DXF) and Doc (method summary, power use, pros/cons, recommendation).",
+    "Tổng lưu lượng khí": "Total air flow", "Độ sâu nước trên đĩa": "Water depth over diffusers", "Khí mỗi đĩa mục tiêu": "Target air per disc",
+    "Diện tích bể được cấp khí": "Aerated tank area", "Thời gian sục khí mỗi ngày": "Aeration time per day", "Giá điện": "Power tariff",
+    "Phương án bố trí": "Arrangement", "Tổng số đĩa": "Total discs", "Tên phương án / dự án": "Option / project name",
+    "Nhà tư vấn / đơn vị lập": "Consultant / prepared by", "Ngày": "Date", "Hình 6.3.15 (đọc gần đúng)": "Figure 6.3.15 (approximate reading)",
     "Dấu chân cacbon": "Carbon footprint", "Máy khuấy": "Mixers", "Dấu chân cacbon – phát thải và năng lượng": "Carbon footprint – emissions and energy",
     "Dấu chân cacbon – bùn và vận chuyển": "Carbon footprint – sludge and transport", "Hệ số tiềm năng nóng lên toàn cầu (GWP)": "Global warming potential (GWP)",
     "Hệ số phát thải lưới điện": "Grid emission factor", "Hệ số lưới điện tự nhập": "User grid factor", "Điện năng khác (bơm, song chắn, phụ trợ)": "Other electricity (pumps, screens, utilities)",
@@ -8026,10 +8046,22 @@ section.sheet.wide { grid-column: 1 / -1; }
 // Aeration option types per the handbook (Xylem/Sanitaire diffuser data) – used by the "So sánh phương án cấp khí" tool.
 // kw = heuristic blower kW per 1000 Nm³/h of process air; sote = standard oxygen transfer efficiency %.
 const AER_METHODS = {
-  FINE:   { vi: "Khí bọt mịn (fine-bubble disc)",              en: "Fine-bubble disc aeration",              kw: 0.55, sote: 12, sotePerM: 4.5, qDiffMax: 4.0, aDiff: 0.072, mixSBR: 0.30, alpha: 0.85, beta: 0.95, pros: "SOTE cao, điện ít, bùn lắng ít, hiện đại nhất cho ICEAS/SBR", cons: "Chi phí đầu tư cao, dễ tắc nếu nước thải chưa xử lý trước", use: "ICEAS, SBR theo mẻ, xử lý hiện đại" },
-  COARSE: { vi: "Khí thô (coarse-bubble)",                     en: "Coarse-bubble aeration",                     kw: 0.90, sote:  6, sotePerM: 2.2, qDiffMax: 8.0, aDiff: 0.120, mixSBR: 0.50, alpha: 0.80, beta: 0.90, pros: "Không tắc, rẻ, bảo trì dễ",                                                        cons: "SOTE thấp, điện nhiều, khuấy trộn kém ở đầy nông",                                                          use: "Khu chọn (selector), bể thải thải công nghiệp dầu mỡ" },
-  SURFACE:{ vi: "Khuấy bề mặt (surface aerator)",              en: "Surface mechanical aeration",              kw: 1.20, sote: 2.5, sotePerM: 1.5, qDiffMax: null, aDiff: null, mixSBR: null, alpha: 0.70, beta: 0.85, pros: "Cấu trúc đơn giản, không cần ống thổi riêng, khuấy trộn tốt",              cons: "SOTE rất thấp, tiếng ồn lớn, không hạn chế được nitrat hóa sâu",                                       use: "Bể tiền-thowali, khu chọn, khu vực điện giá thấp" },
-  JET:    { vi: "Truyềnhaft (jet aerator)",                    en: "Jet aeration",                             kw: 1.00, sote:  8, sotePerM: 3.0, qDiffMax: null, aDiff: null, mixSBR: null, alpha: 0.85, beta: 0.95, pros: "Khuấy trộn mạnh, không cần máy thổi riêng",                                                    cons: "Đầu tư cao, bảo trì dưới nước khó",                                                                          use: "Bể sâu, không gian ít, cần khuấy trộn cường độ cao" },
+  FINE:   { vi: "Khí bọt mịn (fine-bubble disc)",              en: "Fine-bubble disc aeration",              kw: 0.55, sote: 12, sotePerM: 4.5, qDiffMax: 4.0, aDiff: 0.072, mixSBR: 0.30, alpha: 0.85, beta: 0.95,
+    pros: "SOTE cao, điện ít, bùn lắng ít, hiện đại nhất cho ICEAS/SBR", prosEn: "High SOTE, low power, little sludge disturbance, state of the art for ICEAS/SBR",
+    cons: "Chi phí đầu tư cao, dễ tắc nếu nước thải chưa xử lý trước", consEn: "High capital cost, prone to fouling if the wastewater is not pre-treated",
+    use: "ICEAS, SBR theo mẻ, xử lý hiện đại", useEn: "ICEAS, batch SBR, modern treatment" },
+  COARSE: { vi: "Khí thô (coarse-bubble)",                     en: "Coarse-bubble aeration",                     kw: 0.90, sote:  6, sotePerM: 2.2, qDiffMax: 8.0, aDiff: 0.120, mixSBR: 0.50, alpha: 0.80, beta: 0.90,
+    pros: "Không tắc, rẻ, bảo trì dễ", prosEn: "Non-clogging, cheap, easy maintenance",
+    cons: "SOTE thấp, điện nhiều, khuấy trộn kém ở bể nông", consEn: "Low SOTE, high power, poor mixing in shallow tanks",
+    use: "Khu chọn (selector), bể nước thải công nghiệp có dầu mỡ", useEn: "Selector zone, industrial wastewater with oil and grease" },
+  SURFACE:{ vi: "Khuấy bề mặt (surface aerator)",              en: "Surface mechanical aeration",              kw: 1.20, sote: 2.5, sotePerM: 1.5, qDiffMax: null, aDiff: null, mixSBR: null, alpha: 0.70, beta: 0.85,
+    pros: "Cấu trúc đơn giản, không cần ống thổi riêng, khuấy trộn tốt", prosEn: "Simple construction, no air piping needed, good mixing",
+    cons: "SOTE rất thấp, tiếng ồn lớn, không hạn chế được nitrat hóa sâu", consEn: "Very low SOTE, noisy, poor control of deep nitrification",
+    use: "Bể tiền xử lý, khu chọn, khu vực giá điện thấp", useEn: "Pre-treatment tanks, selector, areas with low power tariff" },
+  JET:    { vi: "Sục khí dạng jet (jet aerator)",              en: "Jet aeration",                             kw: 1.00, sote:  8, sotePerM: 3.0, qDiffMax: null, aDiff: null, mixSBR: null, alpha: 0.85, beta: 0.95,
+    pros: "Khuấy trộn mạnh, không cần máy thổi riêng", prosEn: "Strong mixing, no separate blower needed",
+    cons: "Đầu tư cao, bảo trì dưới nước khó", consEn: "High capital cost, difficult underwater maintenance",
+    use: "Bể sâu, không gian ít, cần khuấy trộn cường độ cao", useEn: "Deep tanks, tight space, high-intensity mixing" },
 };
 
 </script>
@@ -10037,7 +10069,7 @@ const AER_METHODS = {
     const ox = VX + (VW - mw * k) / 2 - ext.x0 * k, oy = planTop + ext.y1 * k;   // model y up → paper y down
     const X = (x) => ox + x * k, Y = (y) => oy - y * k;
     TB(VX, 15, `MẶT BẰNG – TỈ LỆ 1:${sP}${lay && lay.letter ? ` – PHƯƠNG ÁN BỐ TRÍ ${lay.letter}` : ""}`, `PLAN – SCALE 1:${sP}${lay && lay.letter ? ` – ARRANGEMENT ${lay.letter}: ${lay.name[1]}` : ""}`, 3.2, { bold: true });
-    if (lay && lay.letter) T(VX + 120, 15, lay.name[0], 2.4, { layer: "ANG", bold: true });
+    if (lay && lay.letter) { T(VX + 120, 15, lay.name[0], 2.4, { layer: "ANG", bold: true }); if (lay.name[1]) T(VX + 120, 17.6, lay.name[1], 1.7, { layer: "ANG", en: true }); }
     if (p.shape === "CIRC") {
       C(X(0), Y(0), g.R * k, "TANK", { w: 0.5, fill: "water" });
       C(X(0), Y(0), (g.R + wall) * k, "TANK", { w: 0.5 });
@@ -10144,7 +10176,7 @@ const AER_METHODS = {
         const dm = ((d0 + d1) / 2) * Math.PI / 180;
         const tx = X(m.x + (rr) * Math.cos(dm)) + Math.cos(dm) * 3.2, ty = Y(m.y + (rr) * Math.sin(dm)) - Math.sin(dm) * 3.2 + 1;
         const lab = an.kind === "CIRC" ? `α=${f1(an.alpha, 0)}° (lệch tâm ${f1(an.dev, 0)}°)`
-          : an.alpha < 0.5 ? `α=0° ∥ tường bên · β=90°` : `α=${f1(an.alpha, 0)}° · β=${f1(an.beta, 0)}°`;
+          : an.alpha < 0.5 ? `α=0° ∥ tường bên / side wall · β=90°` : `α=${f1(an.alpha, 0)}° · β=${f1(an.beta, 0)}°`;
         T(tx, ty, lab, 2.2, { bold: true, layer: "ANG", anchor: "middle" });
       }
     });
@@ -10308,10 +10340,10 @@ const AER_METHODS = {
       ry += 1.2;
     });
     // title block fields
-    T(TBx + 2, TBy + 36, `Tỉ lệ / Scale: 1:${sP} (mặt bằng), 1:${sS} (mặt cắt) · Khổ A3`, 2.1);
+    T(TBx + 2, TBy + 36, `Tỉ lệ / Scale: 1:${sP} (mặt bằng / plan), 1:${sS} (mặt cắt / section) · Khổ / Size A3`, 2.1);
     T(332, TBy + 30, `Ngày / Date: ${meta.date || ""}`, 2.1);
-    T(332, TBy + 34, `Tờ / Sheet: ${meta.sheet || "1"}${lay && lay.letter ? ` · PA ${lay.letter}${meta.chosen ? " (chọn)" : ""}` : ""}`, 2.1);
-    T(332, TBy + 38.5, "Theo Sổ tay khuấy trộn Flygt (Xylem 2022)", 1.8);
+    T(332, TBy + 34, `Tờ / Sheet: ${meta.sheet || "1"}${lay && lay.letter ? ` · PA / Opt. ${lay.letter}${meta.chosen ? " (chọn / chosen)" : ""}` : ""}`, 2.1);
+    T(332, TBy + 37.4, "Theo Sổ tay khuấy trộn Flygt (Xylem 2022)", 1.8); T(332, TBy + 39.3,"Per Flygt mixing handbook (Xylem 2022)", 1.4, { en: true });
     return { prims: P, scale: sc, w: PW, h: PH };
   }
 
@@ -10805,7 +10837,7 @@ const AER_METHODS = {
       `${t.pick ? ` <button type="button" data-mx="unpick">${B("Bỏ chọn – về khuyến cáo", "Clear choice – back to the recommendation")}</button>` : ""}</p><div class="tbl">${matrixHTML(R)}</div></section>`;
     // selected unit
     h += `<section class="sheet wide"><h2>${B("3. Máy khuấy đề xuất", "3. Proposed mixer")}</h2><div class="tbl"><table class="chk"><tbody>` +
-      R.selRows.map(([vi, en, v, ve]) => `<tr><td>${B(vi, en)}</td><td class="n">${A.esc(v)}</td></tr>`).join("") + `</tbody></table></div></section>`;
+      R.selRows.map(([vi, en, v, ve]) => `<tr><td>${B(vi, en)}</td><td class="n">${ve && ve !== v ? B(A.esc(v), A.esc(ve)) : A.esc(v)}</td></tr>`).join("") + `</tbody></table></div></section>`;
     // checks
     h += `<section class="sheet wide"><h2>${B("4. Kiểm tra lắp đặt và khoảng hở (Bảng 6.4.3, Mục 6.4.4–6.4.6)", "4. Installation and clearance checks (Table 6.4.3, Sections 6.4.4–6.4.6)")}</h2><div class="tbl"><table class="chk"><tbody>` +
       R.checks.map((c) => `<tr><td>${B(c.vi, c.en)}</td><td>${c.ok === true ? `<span class="pill ok">${B("Đạt", "Pass")}</span>` : c.ok === false ? `<span class="pill bad">${B("Không đạt", "Fail")}</span>` : `<span class="pill ref">${B("Lưu ý", "Note")}</span>`}</td></tr>`).join("") +
@@ -10847,7 +10879,7 @@ const AER_METHODS = {
       if (s.type !== "TEA" && res.lay) summary.push(["Độ ngập tối thiểu S_min", "Minimum submergence S_min", `${N(res.lay.S, 2)} m`]);
     }
     const notes = R.notes.slice(1, 6);
-    return DR().sheet(res, { project: st.project.name || "Dự án", tank: t.name || "Bể", date: st.project.date || "", sheet: String(idx), summary, notes, lay, chosen });
+    return DR().sheet(res, { project: st.project.name || "Dự án", projectEn: st.project.name || "Project", tank: t.name || "Bể", tankEn: t.nameEn || (t.name === "Bể thiếu khí" ? "Anoxic tank" : t.name) || "Tank", date: st.project.date || "", sheet: String(idx), summary, notes, lay, chosen });
   }
 
   function view(el) {
@@ -12585,7 +12617,7 @@ const AER_METHODS = {
       def: () => ({ H: 4, Ls: 10, Lf: 2, Ws: 10, Wf: 2 }),
       run: (v) => { const o = TOOLS.hopper(v); return [["Diện tích mặt nước", o.As, 2, "m²"], ["Diện tích đáy", o.Af, 2, "m²"], ["Thể tích", o.V, 2, "m³"]]; } },
     // ---------------- Cấp khí theo handbook (Xylem/Sanitaire diffuser data) ----------------
-    { id: "aer-cmp", t: "So sánh phương án cấp khí", d: "So sánh song song 4 phương án cấp khí (khí bọt mịn, khí thô, khuấy bề mặt, truyềnhaft) theo tiêu thụ điện, SOTE, diện tích phủ và ứng dụng. Mỗi cột là một phương án: công suất máy thổi kW, điện kWh/ngày, SOTE, đánh giá ưu/nhược, khuyến cáo theo cấu hình bể (ICEAS / SBR theo mẻ / thải công nghiệp).",
+    { id: "aer-cmp", t: "So sánh phương án cấp khí", d: "So sánh song song 4 phương án cấp khí (khí bọt mịn, khí thô, khuấy bề mặt, sục khí dạng jet) theo tiêu thụ điện, SOTE, diện tích phủ và ứng dụng. Mỗi cột là một phương án: công suất máy thổi kW, điện kWh/ngày, SOTE, đánh giá ưu/nhược, khuyến cáo theo cấu hình bể (ICEAS / SBR theo mẻ / thải công nghiệp).",
       f: [["Qn", "Tổng lưu lượng khí", "Nm³/h"], ["depth", "Độ sâu nước trên đĩa", "m"], ["airPerDisc", "Khí mỗi đĩa mục tiêu", "Nm³/h"], ["area", "Diện tích bể được cấp khí", "m²"], ["hours", "Thời gian sục khí mỗi ngày", "h/ngày"], ["elec", "Giá điện", "VND/kWh"], ["discType", "Loại đĩa", "", "dtype"]],
       def: (p, r) => ({ Qn: r ? Math.round(r.aer.air) : 3200, depth: r ? +r.dep.mad.toFixed(2) : 5.5, airPerDisc: r ? +r.aer.qDiff.toFixed(2) : 4.04, area: r ? +r.dim.A.toFixed(1) : 428.4, hours: r ? Math.max(1, Math.round((r.cyc.aerMin || 0) * r.cyc.nCyc / 60)) : 12, elec: 3000, discType: "D9" }),
       run: (v) => {
@@ -12609,9 +12641,9 @@ const AER_METHODS = {
           row(bi("SOTE ước tính", "Estimated SOTE"), c => `${c.m.sote} %`, "%", bi("Sổ tay cấp khí", "Aeration handbook")),
           row(bi("Số đĩa (theo lưu lượng mục tiêu)", "Discs (per target air/disc)"), c => c.nDisc, "đĩa", bi("Qn ÷ khí mỗi đĩa mục tiêu", "Qn ÷ air per disc target")),
           row(bi("Diện tích phủ thô", "Rough disc coverage"), c => `${c.coverPct.toFixed(1)} %`, "%", bi("số đĩa × diện tích 1 đĩa", "disc count × disc area")),
-          row(bi("Ưu điểm", "Pros"), c => bi(c.m.pros, c.m.pros), null, bi("Handbook", "Handbook")),
-          row(bi("Nhược điểm", "Cons"), c => bi(c.m.cons, c.m.cons), null, bi("Handbook", "Handbook")),
-          row(bi("Ứng dụng khuyến cáo", "Recommended application"), c => bi("Phù hợp: " + c.m.use, "Suited for: " + c.m.use), null, bi("Cấu hình bể đang chọn", "Current tank configuration")),
+          row(bi("Ưu điểm", "Pros"), c => bi(c.m.pros, c.m.prosEn), null, bi("Sổ tay", "Handbook")),
+          row(bi("Nhược điểm", "Cons"), c => bi(c.m.cons, c.m.consEn), null, bi("Sổ tay", "Handbook")),
+          row(bi("Ứng dụng khuyến cáo", "Recommended application"), c => bi("Phù hợp: " + c.m.use, "Suited for: " + c.m.useEn), null, bi("Cấu hình bể đang chọn", "Current tank configuration")),
         ];
         // horizontal bar chart: shortest bar (best/lowest kWh) = 100%
         const maxKWh = Math.max(...cmp.map(c => c.kWh));
@@ -12774,7 +12806,7 @@ const AER_METHODS = {
   function aerView() {
     const v = document.getElementById("view");
     const defs = TOOL_DEFS.filter((t) => t.id.startsWith("aer-"));
-    v.innerHTML = `<section class="panel"><div class="eyebrow">Cấp khí / Aeration</div><h2>Thiết kế hệ thống cấp khí theo handbook</h2>` +
+    v.innerHTML = `<section class="panel"><div class="eyebrow">Cấp khí</div><h2>Thiết kế hệ thống cấp khí theo handbook</h2>` +
       `<p class="lead">Mỗi phương án tính độc lập. Bấm “Lấy từ thiết kế” để điền số liệu từ phương án ICEAS đang làm.</p><div class="aero-tools-view aero-full"><div class="cards" id="toolCards">` +
       defs.map((t) => {
         const vals = Object.assign(toolDefaults(t), toolVals[t.id] || {});
@@ -13294,8 +13326,8 @@ const AER_METHODS = {
         ["Phương án", "SOTE (%)", "kW/1000 Nm³/h", "Ưu điểm / nhược điểm / ứng dụng"],
         ["Khí bọt mịn (fine-bubble disc)", "12", "0.55", "SOTE cao, điện ít, hiện đại nhất cho ICEAS/SBR · chi phí đầu tư cao, dễ tắc nếu chưa xử lý trước"],
         ["Khí thô (coarse-bubble)", "6", "0.90", "Không tắc, rẻ, bảo trì dễ · SOTE thấp, điện nhiều, khuấy kém ở đầy nông · khu chọn, thải thải công nghiệp"],
-        ["Khuấy bề mặt (surface aerator)", "2.5", "1.20", "Cấu trúc đơn giản, không cần ống thổi riêng, khuấy tốt · SOTE rất thấp, tiếng ồn lớn · bể tiền-thowali, khu chọn, điện giá thấp"],
-        ["Truyềnhaft (jet aerator)", "8", "1.00", "Khuấy mạnh, không cần máy thổi riêng · đầu tư cao, bảo trì dưới nước khó · bể sâu, không gian ít, khuấy cường độ cao"],
+        ["Khuấy bề mặt (surface aerator)", "2.5", "1.20", "Cấu trúc đơn giản, không cần ống thổi riêng, khuấy tốt · SOTE rất thấp, tiếng ồn lớn · bể tiền xử lý, khu chọn, điện giá thấp"],
+        ["Sục khí dạng jet (jet aerator)", "8", "1.00", "Khuấy mạnh, không cần máy thổi riêng · đầu tư cao, bảo trì dưới nước khó · bể sâu, không gian ít, khuấy cường độ cao"],
       ];
       ws.addRows(rows);
       ws.getCell("A1").font = { bold: true, size: 14 };
@@ -13376,8 +13408,8 @@ const AER_METHODS = {
       <table><thead><tr><th>${bi("Phương án", "Option")}</th><th>${bi("SOTE", "SOTE")}</th><th>${bi("kW / 1000 Nm³/h", "kW / 1000 Nm³/h")}</th><th>${bi("Ưu điểm / nhược điểm / ứng dụng", "Pros / cons / application")}</th></tr></thead><tbody>
         <tr><td><b>${bi("Khí bọt mịn (fine-bubble disc)", "Fine-bubble disc")}</b></td><td class="n">12 %</td><td class="n">0.55</td><td>${bi("SOTE cao, điện ít, hiện đại nhất cho ICEAS/SBR · chi phí đầu tư cao, dễ tắc nếu chưa xử lý trước", "High SOTE, low power, best for ICEAS/SBR · high capex, clogs if influent not pre-treated")}</td></tr>
         <tr><td><b>${bi("Khí thô (coarse-bubble)", "Coarse-bubble")}</b></td><td class="n">6 %</td><td class="n">0.90</td><td>${bi("Không tắc, rẻ, bảo trì dễ · SOTE thấp, điện nhiều, khuấy kém ở đầy nông · khu chọn, thải thải công nghiệp", "Clog-free, cheap, easy service · low SOTE, high power, poor mixing at low submergence · selector, industrial effluent")}</td></tr>
-        <tr><td><b>${bi("Khuấy bề mặt (surface aerator)", "Surface mechanical")}</b></td><td class="n">2.5 %</td><td class="n">1.20</td><td>${bi("Cấu trúc đơn giản, không cần ống thổi riêng, khuấy tốt · SOTE rất thấp, tiếng ồn lớn · bể tiền-thowali, khu chọn, điện giá thấp", "Simple, no separate blower piping, good mixing · very low SOTE, noisy · pre-aeration tank, selector, low power tariff areas")}</td></tr>
-        <tr><td><b>${bi("Truyềnhaft (jet aerator)", "Jet aeration")}</b></td><td class="n">8 %</td><td class="n">1.00</td><td>${bi("Khuấy mạnh, không cần máy thổi riêng · đầu tư cao, bảo trì dưới nước khó · bể sâu, không gian ít, khuấy cường độ cao", "Strong mixing, no separate blower · high capex, underwater service hard · deep tank, limited space, high-intensity mixing")}</td></tr>
+        <tr><td><b>${bi("Khuấy bề mặt (surface aerator)", "Surface mechanical")}</b></td><td class="n">2.5 %</td><td class="n">1.20</td><td>${bi("Cấu trúc đơn giản, không cần ống thổi riêng, khuấy tốt · SOTE rất thấp, tiếng ồn lớn · bể tiền xử lý, khu chọn, điện giá thấp", "Simple, no separate blower piping, good mixing · very low SOTE, noisy · pre-treatment tank, selector, low power tariff areas")}</td></tr>
+        <tr><td><b>${bi("Sục khí dạng jet (jet aerator)", "Jet aeration")}</b></td><td class="n">8 %</td><td class="n">1.00</td><td>${bi("Khuấy mạnh, không cần máy thổi riêng · đầu tư cao, bảo trì dưới nước khó · bể sâu, không gian ít, khuấy cường độ cao", "Strong mixing, no separate blower · high capex, underwater service hard · deep tank, limited space, high-intensity mixing")}</td></tr>
       </tbody></table>
       <p class="hint">${bi("Tham khảo: sổ tay cấp khí Xylem/Sanitaire diffuser data (Donna Li / Sanitaire Diffuser folders).", "Reference: aeration handbook – Xylem/Sanitaire diffuser data.")}</p>
       </body></html>`;
