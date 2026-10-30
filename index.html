@@ -275,6 +275,9 @@ table.tchk td.rec table { display: table; border-collapse: collapse; width: 100%
 /* three aeration panels side by side: comparison table, layout drawing, export report */
 .aero-tools { display: flex; flex-wrap: wrap; gap: 14px; margin: 14px 0; }
 .aero-tools > section { flex: 1 1 300px; min-width: 300px; }
+/* aeration tool cards side by side (Mixer pattern) */
+.aero-tools-view { display: flex; flex-wrap: wrap; gap: 14px; margin: 14px 0; }
+.aero-tools-view .card { flex: 1 1 300px; min-width: 300px; }
 /* horizontal bar chart for aeration energy comparison: shortest bar = 100% */
 .aero-chart { margin: 10px 14px 14px; border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; background: #fff; }
 .aero-chart h3 { margin: 0 0 8px; font-size: .95rem; color: var(--ink); }
@@ -12770,7 +12773,7 @@ const AER_METHODS = {
     const v = document.getElementById("view");
     const defs = TOOL_DEFS.filter((t) => t.id.startsWith("aer-"));
     v.innerHTML = `<section class="panel"><div class="eyebrow">Cấp khí / Aeration</div><h2>Thiết kế hệ thống cấp khí theo handbook</h2>` +
-      `<p class="lead">Mỗi phương án tính độc lập. Bấm “Lấy từ thiết kế” để điền số liệu từ phương án ICEAS đang làm.</p><div class="cards" id="toolCards">` +
+      `<p class="lead">Mỗi phương án tính độc lập. Bấm “Lấy từ thiết kế” để điền số liệu từ phương án ICEAS đang làm.</p><div class="aero-tools-view"><div class="cards" id="toolCards">` +
       defs.map((t) => {
         const vals = Object.assign(toolDefaults(t), toolVals[t.id] || {});
         const fields = t.f.map(([k, lab, unit, type]) => {
@@ -12792,7 +12795,7 @@ const AER_METHODS = {
         }).join("");
         return `<div class="card" data-tool="${t.id}"><h3>${t.t}</h3><div class="fields">${fields}</div><p class="hint">${t.d}</p>` +
           `<div class="btns" style="padding:0 14px 10px"><button type="button" data-fill="${t.id}">Lấy từ thiết kế</button></div><div class="tbl" id="out-${t.id}"></div></div>`;
-      }).join("") + `</div></section>`;
+      }).join("") + `</div></div></section>`;
     defs.forEach(runTool);
     biPass(v);
   }
@@ -12862,9 +12865,8 @@ const AER_METHODS = {
         tables += `<section class="sheet wide"><h2>${lab}</h2><div class="aerdraw">${c.rec[0]}${c.src ? `<div class="src">${bi(c.src[0], c.src[1])}</div>` : ""}</div></section>`;
       }
     }
-    document.getElementById("out-" + t.id).innerHTML = `<div class="aero-tools">` +
-      `<section class="sheet wide"><table class="tchk"><thead><tr><th>${bi("Đại lượng", "Quantity")}</th><th style="text-align:right">${bi("Giá trị", "Value")}</th>` +
-      `<th>${bi("Đơn vị", "Unit")}</th><th>${bi("Khuyến cáo · căn cứ", "Recommended · basis")}</th></tr></thead><tbody>${body}</tbody></table></section>` + tables + draws + `</div>`;
+    document.getElementById("out-" + t.id).innerHTML = `<table class="tchk"><thead><tr><th>${bi("Đại lượng", "Quantity")}</th><th style="text-align:right">${bi("Giá trị", "Value")}</th>` +
+      `<th>${bi("Đơn vị", "Unit")}</th><th>${bi("Khuyến cáo · căn cứ", "Recommended · basis")}</th></tr></thead><tbody>${body}</tbody></table>` + tables + draws;
     biPass(document.getElementById("out-" + t.id));
   }
 
