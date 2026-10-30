@@ -12825,18 +12825,22 @@ const AER_METHODS = {
     const pill = (c) => c.ok === undefined ? "" : ` <span class="pill ${c.ok ? "ok" : "bad"}">${c.ok ? bi("Đạt", "Pass") : (c.failLab ? bi(c.failLab[0], c.failLab[1]) : bi("Ngoài khuyến cáo", "Outside recommendation"))}</span>`;
     let body = "";
     let draws = "";
+    let tables = "";
     for (const [lab, v, d, u, c] of rows) {
       body += `<tr class="key"><td>${lab}${c ? pill(c) : ""}${c ? `<div class="why ${c.ok === false ? "bad" : c.ok === undefined ? "info" : ""}">${bi(c.why ? c.why[0] : "", c.why ? c.why[1] : "")}</div>` : ""}</td>` +
         `<td class="n">${v === null ? "" : fmtN(v, d)}</td><td class="u">${u}</td>` +
-        `<td class="rec">${c ? `<b>${c.rec && c.rec[0] && /^\s*<(svg|table)/.test(c.rec[0]) ? c.rec[0] : bi(c.rec && c.rec[0] ? c.rec[0] : "", c.rec && c.rec[1] ? c.rec[1] : "")}</b>${c.src ? `<div class="src">${bi(c.src[0], c.src[1])}</div>` : ""}` +
-          (c.act && c.act.length ? `<div class="acts">${c.act.map((a) => `<button type="button" class="apply" data-tlset="${t.id}|nDec|${a.n}">${bi(a.vi, a.en)}</button>`).join("")}</div>` : "") : ""}</td></tr>`;
-      // drawing rows: raw SVG moved to its own section below the table (Mixer mxsheet pattern)
+        `<td class="rec">${c ? (c.rec && c.rec[0] && /^\s*<table/.test(c.rec[0]) ? "" : `<b>${c.rec && c.rec[0] && /^\s*<(svg|table)/.test(c.rec[0]) ? c.rec[0] : bi(c.rec && c.rec[0] ? c.rec[0] : "", c.rec && c.rec[1] ? c.rec[1] : "")}</b>${c.src ? `<div class="src">${bi(c.src[0], c.src[1])}</div>` : ""}` + (c.act && c.act.length ? `<div class="acts">${c.act.map((a) => `<button type="button" class="apply" data-tlset="${t.id}|nDec|${a.n}">${bi(a.vi, a.en)}</button>`).join("")}</div>` : "")) : ""}</td></tr>`;
+      // drawing rows: raw SVG moved to its own section below the table (aerdraw pattern)
       if (c && c.draw) {
-        draws += `<section class="sheet wide"><h2>${lab}</h2><div class="mxsheet">${c.draw}</div></section>`;
+        draws += `<section class="sheet wide"><h2>${lab}</h2><div class="aerdraw">${c.draw}</div></section>`;
+      }
+      // raw comparison tables (e.g. aer-ccm) pulled out of the compressed rec cell into their own section
+      if (c && c.rec && c.rec[0] && /^\s*<table/.test(c.rec[0])) {
+        tables += `<section class="sheet wide"><h2>${lab}</h2><div class="aerdraw">${c.rec[0]}${c.src ? `<div class="src">${bi(c.src[0], c.src[1])}</div>` : ""}</div></section>`;
       }
     }
     document.getElementById("out-" + t.id).innerHTML = `<table class="tchk"><thead><tr><th>${bi("Đại lượng", "Quantity")}</th><th style="text-align:right">${bi("Giá trị", "Value")}</th>` +
-      `<th>${bi("Đơn vị", "Unit")}</th><th>${bi("Khuyến cáo · căn cứ", "Recommended · basis")}</th></tr></thead><tbody>${body}</tbody></table>` + draws;
+      `<th>${bi("Đơn vị", "Unit")}</th><th>${bi("Khuyến cáo · căn cứ", "Recommended · basis")}</th></tr></thead><tbody>${body}</tbody></table>` + tables + draws;
     biPass(document.getElementById("out-" + t.id));
   }
 
