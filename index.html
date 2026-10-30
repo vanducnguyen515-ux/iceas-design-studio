@@ -275,6 +275,16 @@ table.tchk td.rec table { display: table; border-collapse: collapse; width: 100%
 /* three aeration panels side by side: comparison table, layout drawing, export report */
 .aero-tools { display: flex; flex-wrap: wrap; gap: 14px; margin: 14px 0; }
 .aero-tools > section { flex: 1 1 300px; min-width: 300px; }
+/* horizontal bar chart for aeration energy comparison: shortest bar = 100% */
+.aero-chart { margin: 10px 14px 14px; border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; background: #fff; }
+.aero-chart h3 { margin: 0 0 8px; font-size: .95rem; color: var(--ink); }
+.aero-bar { display: flex; align-items: center; gap: 10px; margin: 6px 0; font-size: .85rem; }
+.aero-bar .name { width: 96px; flex-shrink: 0; }
+.aero-bar .track { flex: 1; height: 14px; background: var(--line); border-radius: 7px; position: relative; overflow: hidden; }
+.aero-bar .fill { height: 100%; background: var(--accent); border-radius: 7px; transition: width .3s; }
+.aero-bar .fill.best { background: var(--ok); }
+.aero-bar .label { width: 64px; text-align: right; font-size: .8rem; color: var(--muted); white-space: nowrap; }
+.aero-bar .unit { width: 56px; text-align: right; font-size: .8rem; color: var(--muted); }
 /* aer-cmp comparison table inside td.rec: normal table look */
 table.tchk td.rec table th, table.tchk td.rec table td { border: 1px solid var(--line); padding: 4px 6px; font-size: .82rem; text-align: center; vertical-align: middle; }
 table.tchk td.rec table th { background: var(--accent-soft); font-weight: 600; }
@@ -12565,7 +12575,7 @@ const AER_METHODS = {
           ["tỉ lệ × lượng P cần khử × (1 + hệ số an toàn)", "ratio × P to remove × (1 + safety factor)"], ["GetAlum", "GetAlum"])],
         ["Liều chọn", o.doseR, 0, "mg/L", info(["Làm tròn lên bội số 5 mg/L", "Rounded up to a multiple of 5 mg/L"], ["bội số 5 mg/L", "multiple of 5 mg/L"], ["GetAlum", "GetAlum"])],
         ["Lượng phèn", o.kgd, 1, "kg/ngày"], ["Bùn hóa học", o.sludge, 1, "kg/ngày"]]; } },
-    { id: "hop", t: "Thể tích bể/phễu thành nghiêng", d: "Tương đương HopperVolume: công thức lăng trụ V = H/6·(A mặt + A đáy + 4·A giữa).",
+    { id: "hop", t: "Ngăn Selector", d: "Khu chọn (Selector) của bể ICEAS: tính toán thời gian thiếu khí, điều kiện khu chọn và kết nối từ phần Selector hoặc Thiếu khí của C-Tech. Công thức lăng trụ V = H/6·(A mặt + A đáy + 4·A giữa).",
       f: [["H", "Chiều sâu nước", "m"], ["Ls", "Chiều dài mặt nước", "m"], ["Lf", "Chiều dài đáy", "m"], ["Ws", "Chiều rộng mặt nước", "m"], ["Wf", "Chiều rộng đáy", "m"]],
       def: () => ({ H: 4, Ls: 10, Lf: 2, Ws: 10, Wf: 2 }),
       run: (v) => { const o = TOOLS.hopper(v); return [["Diện tích mặt nước", o.As, 2, "m²"], ["Diện tích đáy", o.Af, 2, "m²"], ["Thể tích", o.V, 2, "m³"]]; } },
@@ -12598,7 +12608,17 @@ const AER_METHODS = {
           row(bi("Nhược điểm", "Cons"), c => bi(c.m.cons, c.m.cons), null, bi("Handbook", "Handbook")),
           row(bi("Ứng dụng khuyến cáo", "Recommended application"), c => bi("Phù hợp: " + c.m.use, "Suited for: " + c.m.use), null, bi("Cấu hình bể đang chọn", "Current tank configuration")),
         ];
-        return [[bi("So sánh phương án cấp khí", "Aeration method comparison"), null, 0, "", { ok: undefined, rec: [`<table><thead>${head}</thead><tbody>${rows.map(r => r).join("")}</tbody></table>`, `<table><thead>${head}</thead><tbody>${rows.map(r => r).join("")}</tbody></table>`], src: [bi("AER_METHODS / handbook data", "AER_METHODS / handbook data"), ""] }]];
+        // horizontal bar chart: shortest bar (best/lowest kWh) = 100%
+        const maxKWh = Math.max(...cmp.map(c => c.kWh));
+        const chartHtml = `<div class="aero-chart"><h3>${bi("So sánh tiêu thụ điện", "Power consumption comparison")}</h3>` +
+          cmp.map(c => {
+            const pct = maxKWh > 0 ? Math.round((c.kWh / maxKWh) * 100) : 100;
+            return `<div class="aero-bar"><div class="name">${bi(c.m.vi, c.m.en)}</div>` +
+              `<div class="track"><div class="fill ${c === best ? "best" : ""}" style="width:${pct}%"></div></div>` +
+              `<div class="label">${+c.kWh.toFixed(1)}</div><div class="unit">kWh/ngày</div></div>`;
+          }).join("") + `</div>`;
+        const recHtml = `<table><thead>${head}</thead><tbody>${rows.map(r => r).join("")}</tbody></table>${chartHtml}`;
+        return [[bi("So sánh phương án cấp khí", "Aeration method comparison"), null, 0, "", { ok: undefined, rec: [recHtml, recHtml], src: [bi("AER_METHODS / handbook data", "AER_METHODS / handbook data"), ""] }]];
       } },
     { id: "aer-layout", t: "Bản vẽ bố trí cấp khí", d: "Vẽ sơ đồ bể, ống nhánh (header) chạy dọc chiều dài, đĩa phân phối khí, đánh dấu vị trí máy thổi và máng thu. Dùng cho PFD và bản vẽ CAD tham khảo. Có nhiều phương án bố trí cho mỗi loại cấp khí (chân lưới, giữa bể, hai đầu, trộn hỗn hợp).",
       f: [["layout", "Phương án bố trí", "", "layout"], ["L", "Chiều dài bể", "m"], ["W", "Chiều rộng bể", "m"], ["nGrid", "Số lưới", "lưới"], ["nDiff", "Tổng số đĩa", "đĩa"], ["clrEnd", "Khoảng hở hai đầu lưới", "m"], ["clrSide", "Khoảng hở sát tường", "m"], ["hdrMin", "Khoảng cách ống nhánh tối thiểu", "m"], ["discMin", "Khoảng cách đĩa tối thiểu", "m"]],
