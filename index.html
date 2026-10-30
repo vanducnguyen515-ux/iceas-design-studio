@@ -275,11 +275,11 @@ table.tchk td.rec table { display: table; border-collapse: collapse; width: 100%
 /* three aeration panels side by side: comparison table, layout drawing, export report */
 .aero-tools { display: flex; flex-wrap: wrap; gap: 14px; margin: 14px 0; }
 .aero-tools > section { flex: 1 1 300px; min-width: 300px; }
-/* aeration tool cards: each card on its own full-width row */
+/* aeration tool cards: default 3 per row (Công cụ thiết kế tab) */
 .aero-tools-view { display: flex; flex-wrap: wrap; gap: 14px; margin: 14px 0; }
-.aero-tools-view .card { flex: 1 1 100%; min-width: 100%; }
-/* horizontal bar chart for aeration energy comparison: shortest bar = 100% */
-.aero-chart { margin: 10px 14px 14px; border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; background: #fff; }
+.aero-tools-view .card { flex: 1 1 300px; min-width: 300px; }
+/* aeration tool cards: each card on its own full-width row (Cấp khí tab) */
+.aero-tools-view.aero-full .card { flex: 1 1 100%; min-width: 100%; }
 .aero-chart h3 { margin: 0 0 8px; font-size: .95rem; color: var(--ink); }
 .aero-bar { display: flex; align-items: center; gap: 10px; margin: 6px 0; font-size: .85rem; }
 .aero-bar .name { width: 96px; flex-shrink: 0; }
@@ -12775,7 +12775,7 @@ const AER_METHODS = {
     const v = document.getElementById("view");
     const defs = TOOL_DEFS.filter((t) => t.id.startsWith("aer-"));
     v.innerHTML = `<section class="panel"><div class="eyebrow">Cấp khí / Aeration</div><h2>Thiết kế hệ thống cấp khí theo handbook</h2>` +
-      `<p class="lead">Mỗi phương án tính độc lập. Bấm “Lấy từ thiết kế” để điền số liệu từ phương án ICEAS đang làm.</p><div class="aero-tools-view"><div class="cards" id="toolCards">` +
+      `<p class="lead">Mỗi phương án tính độc lập. Bấm “Lấy từ thiết kế” để điền số liệu từ phương án ICEAS đang làm.</p><div class="aero-tools-view aero-full"><div class="cards" id="toolCards">` +
       defs.map((t) => {
         const vals = Object.assign(toolDefaults(t), toolVals[t.id] || {});
         const fields = t.f.map(([k, lab, unit, type]) => {
