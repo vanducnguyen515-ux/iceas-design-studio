@@ -272,6 +272,9 @@ table.tchk td.rec table { display: table; border-collapse: collapse; width: 100%
 .aerdraw { margin: 12px 14px 14px; border: 1px solid var(--line); border-radius: 8px; overflow-x: auto; }
 .aerdraw svg { display: block; min-width: 720px; border: 1px solid var(--line); background: #fff; }
 .aerdraw h2 { padding: 8px 14px 0; margin: 0; font-size: 1rem; letter-spacing: .01em; }
+/* three aeration panels side by side: comparison table, layout drawing, export report */
+.aero-tools { display: flex; flex-wrap: wrap; gap: 14px; margin: 14px 0; }
+.aero-tools > section { flex: 1 1 300px; min-width: 300px; }
 /* aer-cmp comparison table inside td.rec: normal table look */
 table.tchk td.rec table th, table.tchk td.rec table td { border: 1px solid var(--line); padding: 4px 6px; font-size: .82rem; text-align: center; vertical-align: middle; }
 table.tchk td.rec table th { background: var(--accent-soft); font-weight: 600; }
@@ -12839,8 +12842,9 @@ const AER_METHODS = {
         tables += `<section class="sheet wide"><h2>${lab}</h2><div class="aerdraw">${c.rec[0]}${c.src ? `<div class="src">${bi(c.src[0], c.src[1])}</div>` : ""}</div></section>`;
       }
     }
-    document.getElementById("out-" + t.id).innerHTML = `<table class="tchk"><thead><tr><th>${bi("Đại lượng", "Quantity")}</th><th style="text-align:right">${bi("Giá trị", "Value")}</th>` +
-      `<th>${bi("Đơn vị", "Unit")}</th><th>${bi("Khuyến cáo · căn cứ", "Recommended · basis")}</th></tr></thead><tbody>${body}</tbody></table>` + tables + draws;
+    document.getElementById("out-" + t.id).innerHTML = `<div class="aero-tools">` +
+      `<section class="sheet wide"><table class="tchk"><thead><tr><th>${bi("Đại lượng", "Quantity")}</th><th style="text-align:right">${bi("Giá trị", "Value")}</th>` +
+      `<th>${bi("Đơn vị", "Unit")}</th><th>${bi("Khuyến cáo · căn cứ", "Recommended · basis")}</th></tr></thead><tbody>${body}</tbody></table></section>` + tables + draws + `</div>`;
     biPass(document.getElementById("out-" + t.id));
   }
 
