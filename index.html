@@ -1234,17 +1234,16 @@ section.sheet.wide { grid-column: 1 / -1; }
     const Pb = (1 - 2.25577e-5 * p.alt) ** 5.25588;
     const dfac = 1 + p.de * sub / 10.33;
     const cs20 = csat(20) * dfac, csT = csat(p.Tmax) * dfac * Pb;
-    const mth = AER_METHODS[p.aerMethod] || AER_METHODS.FINE;
-    const alpha = mth.alpha ?? p.alpha, beta = mth.beta ?? p.beta;
-    const ratio = alpha * p.F * p.thK ** (p.Tmax - 20) * (beta * csT - p.DO) / cs20;
+    // method coefficients are copied into the inputs when the aeration method is chosen (onInput), so the inputs govern here
+    const ratio = p.alpha * p.F * p.thK ** (p.Tmax - 20) * (p.beta * csT - p.DO) / cs20;
     const sor = r.aor.maxH / ratio;
-    const sote = mth.sote * sub / 100;
+    const sote = p.sotePerM * sub / 100;
     const airP = sor / (sote * O2_PER_NM3);
-    const airM = (mth.mixSBR ?? p.mixSBR) * A;
+    const airM = p.mixSBR * A;
     const air = Math.max(airP, airM);
-    const qDiffMax = mth.qDiffMax ?? p.qDiffMax;
+    const qDiffMax = p.qDiffMax;
     const nDiff = Math.ceil(air / qDiffMax);
-    const aDiff = mth.aDiff ?? p.aDiff;
+    const aDiff = p.aDiff;
     r.aer = {
       sub, Pb, cs20, csT, ratio, sor, sote, airP, airM, air, gov: airP >= airM ? "Nhu cầu oxy" : "Khuấy trộn",
       nDiff, qDiff: air / nDiff, AtAd: A / (nDiff * aDiff),
@@ -8045,6 +8044,7 @@ section.sheet.wide { grid-column: 1 / -1; }
 
 // Aeration option types per the handbook (Xylem/Sanitaire diffuser data) – used by the "So sánh phương án cấp khí" tool.
 // kw = heuristic blower kW per 1000 Nm³/h of process air; sote = standard oxygen transfer efficiency %.
+// sae = standard aeration efficiency kgO2/kWh (M&E 5th Table 5-31, mid range); mixW = mixing power density W/m³ for complete mix.
 const AER_METHODS = {
   FINE:   { vi: "Khí bọt mịn (fine-bubble disc)",              en: "Fine-bubble disc aeration",              kw: 0.55, sote: 12, sotePerM: 4.5, qDiffMax: 4.0, aDiff: 0.072, mixSBR: 0.30, alpha: 0.85, beta: 0.95,
     pros: "SOTE cao, điện ít, bùn lắng ít, hiện đại nhất cho ICEAS/SBR", prosEn: "High SOTE, low power, little sludge disturbance, state of the art for ICEAS/SBR",
@@ -8054,11 +8054,11 @@ const AER_METHODS = {
     pros: "Không tắc, rẻ, bảo trì dễ", prosEn: "Non-clogging, cheap, easy maintenance",
     cons: "SOTE thấp, điện nhiều, khuấy trộn kém ở bể nông", consEn: "Low SOTE, high power, poor mixing in shallow tanks",
     use: "Khu chọn (selector), bể nước thải công nghiệp có dầu mỡ", useEn: "Selector zone, industrial wastewater with oil and grease" },
-  SURFACE:{ vi: "Khuấy bề mặt (surface aerator)",              en: "Surface mechanical aeration",              kw: 1.20, sote: 2.5, sotePerM: 1.5, qDiffMax: null, aDiff: null, mixSBR: null, alpha: 0.70, beta: 0.85,
+  SURFACE:{ vi: "Khuấy bề mặt (surface aerator)",              en: "Surface mechanical aeration",              kw: 1.20, sote: 2.5, sotePerM: 1.5, qDiffMax: null, aDiff: null, mixSBR: null, alpha: 0.70, beta: 0.85, sae: 1.8, mixW: 20,
     pros: "Cấu trúc đơn giản, không cần ống thổi riêng, khuấy trộn tốt", prosEn: "Simple construction, no air piping needed, good mixing",
     cons: "SOTE rất thấp, tiếng ồn lớn, không hạn chế được nitrat hóa sâu", consEn: "Very low SOTE, noisy, poor control of deep nitrification",
     use: "Bể tiền xử lý, khu chọn, khu vực giá điện thấp", useEn: "Pre-treatment tanks, selector, areas with low power tariff" },
-  JET:    { vi: "Sục khí dạng jet (jet aerator)",              en: "Jet aeration",                             kw: 1.00, sote:  8, sotePerM: 3.0, qDiffMax: null, aDiff: null, mixSBR: null, alpha: 0.85, beta: 0.95,
+  JET:    { vi: "Sục khí dạng jet (jet aerator)",              en: "Jet aeration",                             kw: 1.00, sote:  8, sotePerM: 3.0, qDiffMax: null, aDiff: null, mixSBR: null, alpha: 0.85, beta: 0.95, sae: 1.5, mixW: 12,
     pros: "Khuấy trộn mạnh, không cần máy thổi riêng", prosEn: "Strong mixing, no separate blower needed",
     cons: "Đầu tư cao, bảo trì dưới nước khó", consEn: "High capital cost, difficult underwater maintenance",
     use: "Bể sâu, không gian ít, cần khuấy trộn cường độ cao", useEn: "Deep tanks, tight space, high-intensity mixing" },
@@ -10375,7 +10375,7 @@ const AER_METHODS = {
   // ---------------- DXF R12 (true size, mm) ----------------
   const LAYERS = { FRAME: 7, TANK: 7, WATER: 4, DIM: 3, TEXT: 7, MIXER: 5, PROP: 1, JET: 3, FLOW: 4, ZONE: 6, AXIS: 8, LEVEL: 4, TABLE: 7, AER: 2, ANG: 6 };
   const uni = (s) => String(s).replace(/[^\x20-\x7e]/g, (c) => "\\U+" + c.codePointAt(0).toString(16).toUpperCase().padStart(4, "0"));
-  function toDXF(sheets) {
+  function toDXF(sheets, pre = "MX_") {           // pre: layer-name prefix (MX_ mixer, AER_ aeration)
     const out = [];
     const w = (code, val) => { out.push(String(code)); out.push(String(val)); };
     // header
@@ -10393,7 +10393,7 @@ const AER_METHODS = {
     w(0, "LTYPE"); w(2, "CENTER"); w(70, 0); w(3, "____ _ ____"); w(72, 65); w(73, 4); w(40, 10); w(49, 6); w(49, -1.5); w(49, 1); w(49, -1.5);
     w(0, "ENDTAB");
     w(0, "TABLE"); w(2, "LAYER"); w(70, Object.keys(LAYERS).length);
-    for (const [n, c] of Object.entries(LAYERS)) { w(0, "LAYER"); w(2, "MX_" + n); w(70, 0); w(62, c); w(6, "CONTINUOUS"); }
+    for (const [n, c] of Object.entries(LAYERS)) { w(0, "LAYER"); w(2, pre + n); w(70, 0); w(62, c); w(6, "CONTINUOUS"); }
     w(0, "ENDTAB");
     w(0, "TABLE"); w(2, "STYLE"); w(70, 1); w(0, "STYLE"); w(2, "STANDARD"); w(70, 0); w(40, 0); w(41, 1); w(50, 0); w(71, 0); w(42, 2.5); w(3, "arial.ttf"); w(4, ""); w(0, "ENDTAB");
     w(0, "ENDSEC");
@@ -10403,7 +10403,7 @@ const AER_METHODS = {
       const U = sh.unit, OX = offs[i];
       const PX = (x) => (OX + x * U).toFixed(2), PY = (y) => ((sh.h - y) * U).toFixed(2);
       for (const q of sh.prims) {
-        const lay = "MX_" + (q.layer || "TEXT");
+        const lay = pre + (q.layer || "TEXT");
         const lt = q.dash === "dashed" ? "DASHED" : q.dash === "center" ? "CENTER" : null;
         if (q.t === "line") { w(0, "LINE"); w(8, lay); if (lt) w(6, lt); w(10, PX(q.x1)); w(20, PY(q.y1)); w(30, 0); w(11, PX(q.x2)); w(21, PY(q.y2)); w(31, 0); }
         else if (q.t === "poly") {
@@ -11214,6 +11214,631 @@ const AER_METHODS = {
 
 </script>
 <script>
+// Aeration tool (tab "Cấp khí"), laid out like the mixer tool: oxygen demand → four aeration methods (fine / coarse bubble,
+// surface aerators, jet aerators), each with several arrangements. Every arrangement gets a preliminary A3 drawing built as
+// MIXDRAW primitives (screen SVG, PDF, DXF); the chosen method + arrangement is the drawing printed with the report.
+(function (root) {
+  let A = null;                                    // app helpers: bi, en, fmtN, esc, toast, saveBlob, biPass, design()
+  const KEY = "iceas-aer";
+  const TL = () => root.TOOLS, DR = () => root.MIXDRAW;
+  const O2 = 1.293 * 0.2315;                       // kg O2 per Nm³ air
+  const METHODS = ["FINE", "COARSE", "SURFACE", "JET"];
+  const DEF = { name: "Bể ICEAS", L: 31.7, W: 12, H: 6, Hmin: 4.4, nTanks: 4, aor: 75, ratio: 0.45, sub: 5.0, mix: 2.1, hours: 12, elec: 2000,
+    disc: "D9", qDisc: 4.04, soteF: 5.58, hDiff: 0.25, dwp: 40, pipe: 30, eff: 0.70, alt: 10, Tair: 35 };
+  const DISC_EN = { D9: "9\" (230 mm) EPDM membrane disc", D12: "12\" (300 mm) EPDM membrane disc", T1: "1 m tube diffuser (Ø 63–90 mm)" };
+  const COARSE_D = { name: "Bộ khuếch tán bọt thô (ống inox đục lỗ)", en: "Coarse-bubble diffuser (perforated SS pipe)", Ad: 0.12, qMin: 3, qMax: 12, q: 8 };
+  // arrangements per method: [key, vi, en]
+  const ARR = {
+    FINE: [["FULL", "Lưới đĩa phủ toàn sàn, một lưới", "Full-floor disc grid, one grid"],
+      ["GRID2", "Hai lưới đĩa, mỗi lưới một ống đứng", "Two disc grids, one drop pipe each"],
+      ["TAPER", "Phân bố giảm dần – dày ở đầu vào", "Tapered – denser at the inlet end"]],
+    COARSE: [["SIDE1", "Một dải sát tường bên – dòng xoắn", "One band along a side wall – spiral roll"],
+      ["SIDE2", "Hai dải sát hai tường bên – dòng cuộn kép", "Two bands along both side walls – dual roll"],
+      ["CENTER", "Một dải giữa bể", "One band on the centre line"]],
+    SURFACE: [["ROW", "Một hàng máy dọc tâm bể", "One row on the centre line"],
+      ["STAG", "Hai hàng máy so le", "Two staggered rows"]],
+    JET: [["SIDE", "Ống góp dọc tường bên, phun ngang bể", "Manifold along a side wall, jets across the tank"],
+      ["END", "Ống góp trên tường đầu, phun dọc bể", "Manifold on the end wall, jets along the tank"]],
+  };
+  const NOTES = {
+    FINE: [["Đĩa đặt cao 0,25 m trên sàn; cao độ mặt đĩa toàn lưới sai lệch ≤ ± 6 mm để phân phối khí đều", "Discs 0.25 m above the floor; disc top level within ± 6 mm across the grid for even air distribution"],
+      ["Mỗi lưới có ống đứng riêng và van chỉnh lưu lượng; ống xả nước ngưng ở điểm thấp", "Each grid has its own drop pipe and flow control valve; condensate purge at the low point"],
+      ["Máy thổi khí điều khiển theo DO bằng biến tần; số máy chạy bằng số bể sục khí đồng thời", "Blowers controlled on DO with VFDs; duty units match the tanks aerated at the same time"]],
+    COARSE: [["Bộ khuếch tán bọt thô đặt thành dải sát tường tạo dòng cuộn; không cần lọc khí tinh", "Coarse-bubble diffusers in bands along the walls create a roll pattern; no fine air filtration needed"],
+      ["Hiệu suất truyền oxy thấp: điện năng lớn hơn bọt mịn khoảng 1,8–2,5 lần", "Low oxygen transfer: power about 1.8–2.5 times that of fine bubble"],
+      ["Máy thổi khí điều khiển theo DO bằng biến tần; số máy chạy bằng số bể sục khí đồng thời", "Blowers controlled on DO with VFDs; duty units match the tanks aerated at the same time"]],
+    SURFACE: [["Máy khuấy bề mặt cố định cần mực nước ổn định; với ICEAS/SBR mực nước dao động nên dùng loại phao nổi", "Fixed surface aerators need a steady level; with ICEAS/SBR level variation use floating units"],
+      ["Dừng máy trong pha lắng và xả; khoảng cách giữa các máy theo vùng ảnh hưởng", "Stop the aerators during settle and decant; spacing per zone of influence"],
+      ["Cần sàn công tác, che chắn chống bắn nước và giảm tiếng ồn", "Walkway, splash shielding and noise control required"]],
+    JET: [["Vòi phun đặt cách sàn khoảng 0,6 m; bơm tuần hoàn chìm hoặc đặt khô, ống hút khí lên trên mặt nước", "Nozzles about 0.6 m above the floor; submersible or dry recirculation pump, air intake above the water"],
+      ["Phù hợp bể sâu ≥ 4 m; jet vẫn khuấy trộn khi không cấp khí (pha thiếu khí)", "Suited to tanks ≥ 4 m deep; jets still mix without air (anoxic phase)"],
+      ["Bảo trì vòi phun dưới nước: dùng ống góp tháo nâng được", "Underwater nozzle maintenance: use a retrievable manifold"]],
+  };
+  const NOTE_END = ["Bản vẽ sơ bộ; số thiết bị, cao độ và đường ống do nhà cung cấp xác nhận", "Preliminary drawing; equipment count, levels and piping to be confirmed by the supplier"];
+
+  let st = null;
+  function load() {
+    try { st = JSON.parse(localStorage.getItem(KEY) || "null"); } catch (e) { st = null; }
+    if (!st || !st.inp) st = { project: { name: "", client: "", engineer: "", date: new Date().toLocaleDateString("vi-VN") }, inp: {}, method: "", arr: {}, allDraw: false, fresh: true };
+    st.inp = Object.assign({}, DEF, st.inp);
+    st.arr = st.arr || {};
+  }
+  const save = () => { try { localStorage.setItem(KEY, JSON.stringify(st)); } catch (e) {} };
+
+  const N = (v, d = 0) => A.fmtN(v, d);
+  const E = (v, d = 0) => (v === null || v === undefined || !isFinite(v) ? "–" : Number(v).toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d }));
+  const B = (vi, en) => A.bi(A.esc(vi), en);
+  const f1 = (v, d = 1) => (v === null || v === undefined || !isFinite(v) ? "–" : Number(v).toFixed(d).replace(".", ","));
+
+  // ---------------- calculation: every method sized for the same oxygen demand ----------------
+  const STD_KW = [3, 4, 5.5, 7.5, 11, 15, 18.5, 22, 30, 37, 45, 55, 75, 90, 110];
+  const stdKW = (k) => STD_KW.find((x) => x >= k - 1e-9) || Math.ceil(k);
+  function calc(i) {
+    const AREA = i.L * i.W, V = AREA * i.H, SOR = i.aor / Math.max(i.ratio, 0.05);
+    const out = {};
+    for (const k of METHODS) {
+      const m = AER_METHODS[k], o = { key: k, m, chk: [] };
+      if (k === "FINE" || k === "COARSE") {
+        const fine = k === "FINE";
+        const d = fine ? Object.assign({ en: DISC_EN[i.disc] }, TL().DIFFUSERS[i.disc] || TL().DIFFUSERS.D9) : COARSE_D;
+        o.d = d; o.diffused = true;
+        o.sote = (fine ? i.soteF : m.sotePerM) * i.sub;
+        o.airO2 = SOR / (o.sote / 100 * O2); o.airMix = i.mix * AREA;
+        o.air = Math.max(o.airO2, o.airMix); o.gov = o.airO2 >= o.airMix ? "O2" : "MIX";
+        o.n = Math.max(1, Math.ceil(o.air / (fine ? i.qDisc : d.q))); o.qd = o.air / o.n; o.atad = AREA / (o.n * d.Ad);
+        o.bl = TL().blower({ Qn: o.air, depth: i.H - i.hDiff, dwp: fine ? i.dwp : 15, pipe: i.pipe, foul: fine ? 30 : 10, Tair: i.Tair, alt: i.alt, eff: i.eff });
+        o.P = o.bl.kW; o.unit = o.bl.motor; o.Pinst = o.bl.motor;
+        o.duty = Math.max(1, Math.ceil(i.nTanks * i.hours / 24 - 1e-9));
+        o.chk.push(["Khí mỗi bộ khuếch tán trong dải làm việc", "Air per diffuser within the operating range",
+          `${N(o.qd, 2)} Nm³/h (${N(d.qMin, 1)}–${N(d.qMax, 1)})`, `${E(o.qd, 2)} Nm³/h (${E(d.qMin, 1)}–${E(d.qMax, 1)})`, o.qd >= d.qMin && o.qd <= d.qMax]);
+        if (fine) o.chk.push(["Mật độ phủ sàn At/Ad ≤ 20", "Floor coverage At/Ad ≤ 20", N(o.atad, 1), E(o.atad, 1), o.atad <= 20]);
+        o.chk.push(["Khí cấp ≥ khí khuấy trộn tối thiểu", "Air supply ≥ minimum mixing air", `${N(o.air, 0)} ≥ ${N(o.airMix, 0)} Nm³/h`, `${E(o.air, 0)} ≥ ${E(o.airMix, 0)} Nm³/h`, null]);
+      } else {
+        o.diffused = false; o.sae = m.sae;
+        o.PO2 = SOR / m.sae; o.Pmix = m.mixW * V / 1000;
+        o.P = Math.max(o.PO2, o.Pmix); o.gov = o.PO2 >= o.Pmix ? "O2" : "MIX";
+        const cap = k === "SURFACE" ? 55 : 37, zone = k === "SURFACE" ? i.W : 12;
+        o.n = Math.max(1, Math.ceil(o.P / cap), Math.ceil(i.L / Math.max(zone, 1) - 1e-9));
+        o.unit = stdKW(o.P / o.n * 1.1); o.Pinst = o.n * o.unit;
+        if (k === "SURFACE") {
+          o.chk.push(["Độ sâu nước ≤ 5 m (máy khuấy bề mặt)", "Water depth ≤ 5 m (surface aerator)", `${N(i.H, 2)} m`, `${E(i.H, 2)} m`, i.H <= 5]);
+          o.chk.push(["Mực nước dao động TWL − BWL ≤ 1 m (máy cố định)", "Level variation TWL − BWL ≤ 1 m (fixed units)", `${N(i.H - i.Hmin, 2)} m`, `${E(i.H - i.Hmin, 2)} m`, i.H - i.Hmin <= 1]);
+        } else o.chk.push(["Độ sâu nước ≥ 4 m (sục khí jet)", "Water depth ≥ 4 m (jet aeration)", `${N(i.H, 2)} m`, `${E(i.H, 2)} m`, i.H >= 4]);
+      }
+      o.kWh = o.P * i.hours * i.nTanks; o.cost = o.kWh * i.elec; o.Wm3 = o.P * 1000 / V;
+      o.ok = o.chk.every((c) => c[4] !== false);
+      out[k] = o;
+    }
+    const all = METHODS.map((k) => out[k]), feas = all.filter((o) => o.ok);
+    const rec = (feas.length ? feas : all).reduce((b, c) => (c.kWh < b.kWh ? c : b));
+    return { i, AREA, V, SOR, m: out, rec: rec.key };
+  }
+  const chosenKey = (R) => (st.method && R.m[st.method] ? st.method : R.rec);
+  const arrOf = (k) => (st.arr[k] && ARR[k].some((a) => a[0] === st.arr[k]) ? st.arr[k] : ARR[k][0][0]);
+
+  // ---------------- equipment layout in model metres (origin inner lower-left corner, x along L, y across W) ----------------
+  function layout(R, k, arr) {
+    const i = R.i, o = R.m[k], L = i.L, W = i.W, Ly = { k, arr, pts: [], lines: [], units: [], jets: [], rolls: [], drops: [] };
+    if (k === "FINE") {
+      const zones = arr === "GRID2" ? [[0, L / 2, 0.5], [L / 2, L, 0.5]] : arr === "TAPER" ? [[0, L * 0.4, 0.6], [L * 0.4, L, 0.4]] : [[0, L, 1]];
+      let left = o.n;
+      zones.forEach(([xa, xb, frac], zi) => {
+        const nz = zi === zones.length - 1 ? left : Math.round(o.n * frac); left -= nz;
+        let g = null;
+        for (let ng = 1; ng <= 6 && !(g && g.ok); ng++) g = TL().grid({ L: xb - xa, W, nGrid: ng, nDiff: nz, clrEnd: 0.3, clrSide: 0.3, hdrMin: 0.6, discMin: 0.3 });
+        if (!g || !g.ok) return;
+        const gl = (xb - xa) / g.nGrid;
+        let placed = 0;
+        for (let gi = 0; gi < g.nGrid; gi++) {
+          const x0 = xa + gi * gl + 0.3, per = Math.ceil(nz / g.nGrid);
+          const ys = Array.from({ length: g.hdrPerGrid }, (_, h) => 0.3 + h * g.hdrSpacing);
+          Ly.lines.push({ x1: x0 - 0.15, y1: ys[0], x2: x0 - 0.15, y2: W - 0.3, kind: "man" });     // distribution manifold across W
+          Ly.drops.push({ x: x0 - 0.15, y: W - 0.3 });
+          let cnt = 0;
+          for (const y of ys) {
+            Ly.lines.push({ x1: x0 - 0.15, y1: y, x2: x0 + g.hdrLen, y2: y, kind: "hdr" });
+            for (let j = 0; j < g.discPerHdr && cnt < per && placed < nz; j++, cnt++, placed++) Ly.pts.push({ x: x0 + j * g.discSpacing, y });
+          }
+        }
+        Ly.zone = Ly.zone || []; Ly.zone.push({ xa, xb, n: placed, hs: g.hdrSpacing, ds: g.discSpacing, nGrid: g.nGrid, hdr: g.hdrPerGrid });
+      });
+      Ly.r = (o.d.Ad / Math.PI) ** 0.5;                 // disc radius from active area
+    } else if (k === "COARSE") {
+      const bands = arr === "SIDE2" ? [0.6, W - 0.6] : arr === "CENTER" ? [W / 2] : [0.6];
+      const per = Math.ceil(o.n / bands.length), x0 = 0.5, x1 = L - 0.5;
+      const rows = Math.max(1, Math.ceil(per / Math.floor((x1 - x0) / 0.5 + 1)));
+      let left = o.n;
+      bands.forEach((yb, bi) => {
+        const nb = Math.min(left, per); left -= nb;
+        const perRow = Math.ceil(nb / rows);
+        for (let r = 0; r < rows; r++) {
+          const y = yb + (r - (rows - 1) / 2) * 0.5 * (bands.length === 1 && yb < W / 2 ? 1 : 1);
+          const nr = Math.min(perRow, nb - r * perRow); if (nr <= 0) break;
+          Ly.lines.push({ x1: x0, y1: y, x2: x1, y2: y, kind: "hdr" });
+          for (let j = 0; j < nr; j++) Ly.pts.push({ x: nr === 1 ? (x0 + x1) / 2 : x0 + j * (x1 - x0) / (nr - 1), y, bar: true });
+        }
+        Ly.drops.push({ x: x0, y: yb });
+        Ly.rolls.push({ y: yb, dir: yb < W / 2 ? 1 : -1 });
+      });
+    } else if (k === "SURFACE") {
+      const n = o.n, D = Math.min(1.2 + o.unit / 25, W * 0.4);
+      for (let j = 0; j < n; j++) {
+        const x = L * (j + 0.5) / n, y = arr === "STAG" && n > 1 ? (j % 2 ? W * 0.72 : W * 0.28) : W / 2;
+        Ly.units.push({ id: `SA-${j + 1}`, x, y, D, R: Math.min(arr === "STAG" ? W * 0.3 : W / 2, L / n / 2) * 0.95 });
+      }
+    } else {
+      const n = o.n;
+      if (arr === "END") {
+        for (let j = 0; j < n; j++) { const y = W * (j + 0.5) / n; Ly.jets.push({ id: `JA-${j + 1}`, x: 0.8, y, dx: 1, dy: 0, len: Math.min(L * 0.45, 25) }); }
+        Ly.lines.push({ x1: 0.8, y1: W * 0.5 / n, x2: 0.8, y2: W * (n - 0.5) / n, kind: "man" });
+        Ly.pump = { x: -1.6, y: W / 2 };
+      } else {
+        for (let j = 0; j < n; j++) { const x = L * (j + 0.5) / n; Ly.jets.push({ id: `JA-${j + 1}`, x, y: 0.8, dx: 0, dy: 1, len: W * 0.6 }); }
+        Ly.lines.push({ x1: L * 0.5 / n, y1: 0.8, x2: L * (n - 0.5) / n, y2: 0.8, kind: "man" });
+        Ly.pump = { x: L * 0.5 / n, y: -1.6 };
+      }
+    }
+    return Ly;
+  }
+
+  // ---------------- A3 sheet: plan, section A-A, equipment schedule, design data, notes, title block ----------------
+  function sheet(R, k, arr, meta) {
+    const P = [], i = R.i, o = R.m[k], m = o.m, Ly = layout(R, k, arr);
+    const arrDef = ARR[k].find((a) => a[0] === arr) || ARR[k][0], letter = String.fromCharCode(65 + ARR[k].indexOf(arrDef));
+    const L = (x1, y1, x2, y2, layer, w = 0.25, dash) => P.push({ t: "line", x1, y1, x2, y2, layer, w, dash });
+    const Poly = (pts, layer, op = {}) => P.push(Object.assign({ t: "poly", pts, layer, w: 0.25 }, op));
+    const C = (cx, cy, r, layer, op = {}) => P.push(Object.assign({ t: "circle", cx, cy, r, layer, w: 0.25 }, op));
+    const T = (x, y, s, h, op = {}) => P.push(Object.assign({ t: "text", x, y, s: String(s), h, layer: "TEXT", anchor: "start" }, op));
+    const TB = (x, y, vi, en, h, op = {}) => { T(x, y, vi, h, op); if (en) T(x, y + h * 1.15, en, h * 0.72, Object.assign({}, op, { en: true, bold: false })); };
+    const Rect = (x1, y1, x2, y2, layer, op = {}) => Poly([[x1, y1], [x2, y1], [x2, y2], [x1, y2]], layer, Object.assign({ closed: true }, op));
+    const arrow = (x1, y1, x2, y2, layer, size = 2.2, w = 0.35) => {
+      L(x1, y1, x2, y2, layer, w);
+      const a = Math.atan2(y2 - y1, x2 - x1), s = size;
+      Poly([[x2, y2], [x2 - s * Math.cos(a - 0.35), y2 - s * Math.sin(a - 0.35)], [x2 - s * Math.cos(a + 0.35), y2 - s * Math.sin(a + 0.35)]], layer, { closed: true, fill: true, w: 0.1 });
+    };
+    const dimH = (x1, x2, y, yRef, label) => {
+      L(x1, yRef, x1, y + (y > yRef ? 1.5 : -1.5), "DIM", 0.13); L(x2, yRef, x2, y + (y > yRef ? 1.5 : -1.5), "DIM", 0.13);
+      L(x1, y, x2, y, "DIM", 0.18);
+      [[x1, 1], [x2, -1]].forEach(([x, d]) => L(x - 1.1, y + 1.1 * d, x + 1.1, y - 1.1 * d, "DIM", 0.3));
+      T((x1 + x2) / 2, y - 1, label, 2.5, { anchor: "middle", layer: "DIM" });
+    };
+    const dimV = (y1, y2, x, xRef, label) => {
+      L(xRef, y1, x + (x > xRef ? 1.5 : -1.5), y1, "DIM", 0.13); L(xRef, y2, x + (x > xRef ? 1.5 : -1.5), y2, "DIM", 0.13);
+      L(x, y1, x, y2, "DIM", 0.18);
+      [[y1, 1], [y2, -1]].forEach(([y, d]) => L(x - 1.1 * d, y - 1.1, x + 1.1 * d, y + 1.1, "DIM", 0.3));
+      P.push({ t: "text", x: x - 1.2, y: (y1 + y2) / 2, s: label, h: 2.5, layer: "DIM", anchor: "middle", rot: -90 });
+    };
+
+    // frame and title block
+    Poly([[10, 10], [410, 10], [410, 287], [10, 287]], "FRAME", { closed: true, w: 0.5 });
+    const TBx = 252, TBy = 247;
+    Rect(TBx, TBy, 410, 287, "FRAME", { w: 0.35 });
+    L(TBx, TBy + 14, 410, TBy + 14, "FRAME", 0.18); L(TBx, TBy + 26, 410, TBy + 26, "FRAME", 0.18); L(330, TBy + 26, 330, 287, "FRAME", 0.18);
+    TB(TBx + 2, TBy + 4.5, "BỐ TRÍ CẤP KHÍ – BẢN VẼ SƠ BỘ", "AERATION LAYOUT – PRELIMINARY DRAWING", 3.5, { bold: true });
+    TB(TBx + 2, TBy + 17.5, `${meta.project || "Dự án"} · ${i.name || "Bể"}`, `${meta.project || "Project"} · ${i.nameEn || A.en(i.name) || i.name || "Tank"}`, 2.6);
+    TB(TBx + 2, TBy + 29.5, `Phương án: ${m.vi}`, `Method: ${m.en}`, 2.2);
+
+    // plan view
+    const VX = 14, VY = 20, VW = 232, VH = 128, wall = 0.3;
+    const out0 = k === "FINE" || k === "COARSE" ? 4.5 : k === "JET" ? 3 : 0.6;   // room for blower / pump outside the tank
+    const ext = { x0: -wall - out0, y0: -wall - (k === "JET" && arr !== "END" ? 3 : 0), x1: i.L + wall, y1: i.W + wall };
+    const mw = ext.x1 - ext.x0, mh = ext.y1 - ext.y0;
+    const sP = DR().pickScale(mw + 4, mh + 6, VW, VH - 8), k1 = 1000 / sP;
+    const ox = VX + (VW - mw * k1) / 2 - ext.x0 * k1, oy = VY + 10 + ext.y1 * k1;
+    const X = (x) => ox + x * k1, Y = (y) => oy - y * k1;
+    TB(VX, 15, `MẶT BẰNG – TỈ LỆ 1:${sP} – PHƯƠNG ÁN BỐ TRÍ ${letter}`, `PLAN – SCALE 1:${sP} – ARRANGEMENT ${letter}`, 3.2, { bold: true });
+    T(VX + 120, 15, arrDef[1], 2.4, { layer: "ANG", bold: true }); T(VX + 120, 17.6, arrDef[2], 1.7, { layer: "ANG", en: true });
+    Rect(X(0), Y(0), X(i.L), Y(i.W), "TANK", { w: 0.5, fill: "water" });
+    Rect(X(-wall), Y(-wall), X(i.L + wall), Y(i.W + wall), "TANK", { w: 0.5 });
+    L(X(-1), Y(i.W / 2), X(i.L + 1), Y(i.W / 2), "AXIS", 0.13, "center");
+    // section mark A-A across the width at mid-length
+    const xs = i.L * 0.3;
+    L(X(xs), Y(i.W + wall) - 3, X(xs), Y(-wall) + 3, "AXIS", 0.25, "center");
+    T(X(xs) + 1.2, Y(i.W + wall) - 3.5, "A", 3, { bold: true }); T(X(xs) + 1.2, Y(-wall) + 4.2, "A", 3, { bold: true });
+    // equipment
+    for (const ln of Ly.lines) L(X(ln.x1), Y(ln.y1), X(ln.x2), Y(ln.y2), "AER", ln.kind === "man" ? 0.5 : 0.3);
+    if (k === "FINE") { const r = Math.max(Ly.r * k1, 0.45); for (const q of Ly.pts) C(X(q.x), Y(q.y), r, "MIXER", { w: 0.15, fill: "mixer" }); }
+    if (k === "COARSE") for (const q of Ly.pts) Rect(X(q.x) - 0.5, Y(q.y) - 1.2, X(q.x) + 0.5, Y(q.y) + 1.2, "MIXER", { w: 0.15, fill: "mixer" });
+    for (const r of Ly.rolls) {
+      const ya = r.y + r.dir * Math.min(i.W * 0.45, 4), x = i.L * 0.82;
+      arrow(X(x), Y(r.y + r.dir * 0.8), X(x), Y(ya), "FLOW", 2.2, 0.3);
+      T(X(x) + 1.5, (Y(r.y) + Y(ya)) / 2, "dòng cuộn / roll", 2, { layer: "FLOW" });
+    }
+    for (const u of Ly.units) {
+      C(X(u.x), Y(u.y), u.R * k1, "ZONE", { w: 0.18, dash: "dashed" });
+      C(X(u.x), Y(u.y), u.D / 2 * k1, "MIXER", { w: 0.35, fill: "mixer" });
+      L(X(u.x) - u.D / 2 * k1 - 1.5, Y(u.y), X(u.x) + u.D / 2 * k1 + 1.5, Y(u.y), "AXIS", 0.13, "center");
+      T(X(u.x), Y(u.y) - u.D / 2 * k1 - 1.2, u.id, 2.4, { anchor: "middle", bold: true, layer: "MIXER" });
+    }
+    for (const j of Ly.jets) {
+      Rect(X(j.x) - 1.2, Y(j.y) - 1.2, X(j.x) + 1.2, Y(j.y) + 1.2, "JET", { w: 0.3, fill: "pump" });
+      arrow(X(j.x + j.dx * 0.6), Y(j.y + j.dy * 0.6), X(j.x + j.dx * j.len), Y(j.y + j.dy * j.len), "JET", 2.4, 0.35);
+      T(X(j.x) + (j.dx ? -1.5 : 1.8), Y(j.y) + (j.dx ? 4 : -1.8), j.id, 2.2, { bold: true, layer: "JET", anchor: j.dx ? "end" : "start" });
+    }
+    if (Ly.pump) {
+      Rect(X(Ly.pump.x) - 2.5, Y(Ly.pump.y) - 2, X(Ly.pump.x) + 2.5, Y(Ly.pump.y) + 2, "MIXER", { w: 0.35, fill: "pump" });
+      T(X(Ly.pump.x), Y(Ly.pump.y) + 1, "P", 2.4, { anchor: "middle", bold: true });
+      const m0 = Ly.lines[0]; L(X(Ly.pump.x), Y(Ly.pump.y), X(m0.x1), Y(m0.y1), "AER", 0.5);
+      if (arr === "END") TB(X(Ly.pump.x) - 3, Y(Ly.pump.y) + 7, "bơm tuần hoàn + ống hút khí", "recirculation pump + air intake", 1.9, { anchor: "end" });
+      else TB(X(Ly.pump.x) + 3.5, Y(Ly.pump.y) + 1, "bơm tuần hoàn + ống hút khí", "recirculation pump + air intake", 1.9);
+    }
+    if (o.diffused) {
+      // blower and air main to every drop pipe
+      const bx = -wall - out0 + 0.4, bw = Math.min(out0 - 1, 3.2), byc = i.W / 2;
+      Rect(X(bx), Y(byc + bw / 2), X(bx + bw), Y(byc - bw / 2), "MIXER", { w: 0.35, fill: "pump" });
+      T(X(bx + bw / 2), Y(byc) + 1, "MB", 2.4, { anchor: "middle", bold: true });
+      TB(X(bx), Y(byc - bw / 2) + 4, "máy thổi khí", "blower", 1.9);
+      const xm = X(-wall - 0.6);
+      L(X(bx + bw), Y(byc), xm, Y(byc), "AER", 0.6);
+      const ysD = Ly.drops.map((d) => d.y);
+      L(xm, Y(Math.min(byc, ...ysD)), xm, Y(Math.max(byc, ...ysD)), "AER", 0.6);
+      for (const d of Ly.drops) { L(xm, Y(d.y), X(d.x), Y(d.y), "AER", 0.45, "dashed"); C(X(d.x), Y(d.y), 0.9, "AER", { w: 0.35 }); }
+    }
+    dimH(X(0), X(i.L), Y(-wall) + (Ly.pump && arr !== "END" ? 13 : 7), Y(0), `${f1(i.L, 2)} m`);
+    dimV(Y(i.W), Y(0), X(i.L + wall) + 7, X(i.L), `${f1(i.W, 2)} m`);
+    if (k === "FINE" && Ly.zone && Ly.zone[0]) {
+      const z = Ly.zone[0], y0 = 0.3, x0 = z.xa + 0.3;
+      if (z.hdr > 1) dimV(Y(y0 + z.hs), Y(y0), X(x0) - 4, X(x0), `${f1(z.hs, 2)}`);
+    }
+
+    // section A-A across the width
+    const SY = 160, SH = 74, sS = DR().pickScale(i.W + 2 * wall + 6, i.H + 1.8, VW - 30, SH - 14), k2 = 1000 / sS;
+    TB(VX, SY, `MẶT CẮT A-A – TỈ LỆ 1:${sS}`, `SECTION A-A – SCALE 1:${sS}`, 3.2, { bold: true });
+    const sx0 = VX + (VW - (i.W + 2 * wall) * k2) / 2 + wall * k2, sy0 = SY + SH - 4;
+    const XS = (y) => sx0 + y * k2, YS = (z) => sy0 - z * k2;
+    Poly([[XS(-wall), YS(i.H + 0.5)], [XS(-wall), YS(-wall)], [XS(i.W + wall), YS(-wall)], [XS(i.W + wall), YS(i.H + 0.5)], [XS(i.W), YS(i.H + 0.5)], [XS(i.W), YS(0)], [XS(0), YS(0)], [XS(0), YS(i.H + 0.5)]], "TANK", { closed: true, w: 0.4, fill: "wall" });
+    Rect(XS(0), YS(i.H), XS(i.W), YS(0), "WATER", { w: 0, fill: "water" });
+    L(XS(0), YS(i.H), XS(i.W), YS(i.H), "LEVEL", 0.3); L(XS(0), YS(i.Hmin), XS(i.W), YS(i.Hmin), "LEVEL", 0.25, "dashed");
+    T(XS(i.W) + 2, YS(i.H) + 1, `TWL ${f1(i.H, 2)}`, 2.2, { layer: "LEVEL" }); T(XS(i.W) + 2, YS(i.Hmin) + 1, `BWL ${f1(i.Hmin, 2)}`, 2.2, { layer: "LEVEL" });
+    if (o.diffused) {
+      const yRows = [...new Set(Ly.pts.map((q) => +q.y.toFixed(2)))].sort((a, b) => a - b);
+      for (const y of yRows) C(XS(y), YS(i.hDiff), Math.max(0.12 * k2, 0.5), "MIXER", { w: 0.15, fill: "mixer" });
+      const dy = Ly.drops[0] ? (k === "FINE" ? i.W - 0.3 : Ly.drops[0].y) : i.W - 0.3;
+      L(XS(dy), YS(i.hDiff), XS(dy), YS(i.H + 0.5), "AER", 0.5);
+      L(XS(dy), YS(i.H + 0.5), XS(dy) + 6, YS(i.H + 0.5), "AER", 0.5);
+      T(XS(dy) + 6.5, YS(i.H + 0.5) + 1, k === "FINE" ? "ống đứng / drop pipe" : "ống cấp khí / air pipe", 2);
+      dimV(YS(i.hDiff), YS(0), XS(0) - 6, XS(0), `${f1(i.hDiff, 2)}`);
+      dimV(YS(i.H), YS(i.hDiff), XS(0) - 12, XS(0), `${f1(i.H - i.hDiff, 2)}`);
+      for (const r of Ly.rolls) { const yc = r.y + r.dir * Math.min(i.W * 0.3, 3); arrow(XS(r.y), YS(i.H * 0.7), XS(yc), YS(i.H * 0.88), "FLOW", 2, 0.3); }
+    } else if (k === "SURFACE") {
+      const u = Ly.units[0];
+      if (u) {
+        const yc = arr === "STAG" ? u.y : i.W / 2, d = u.D * k2;
+        Rect(XS(yc) - d / 2, YS(i.H) - 1, XS(yc) + d / 2, YS(i.H) + 1, "MIXER", { w: 0.35, fill: "mixer" });
+        Rect(XS(yc) - 2, YS(i.H + 1.2), XS(yc) + 2, YS(i.H) - 1, "MIXER", { w: 0.3, fill: "pump" });
+        L(XS(-wall), YS(i.H + 1.2), XS(i.W + wall), YS(i.H + 1.2), "TANK", 0.5);
+        T(XS(yc) + 3, YS(i.H + 1.2) - 1.2, "sàn công tác + động cơ / walkway + drive", 2);
+        arrow(XS(yc) - d / 2, YS(i.H) + 2, XS(yc) - d / 2 - 10, YS(i.H * 0.6), "FLOW", 2, 0.3);
+        arrow(XS(yc) + d / 2, YS(i.H) + 2, XS(yc) + d / 2 + 10, YS(i.H * 0.6), "FLOW", 2, 0.3);
+      }
+    } else {
+      const j = Ly.jets[0], zj = 0.6;
+      if (j) {
+        const y0 = arr === "END" ? i.W / 2 : 0.8;
+        Rect(XS(y0) - 1.2, YS(zj) - 1.2, XS(y0) + 1.2, YS(zj) + 1.2, "JET", { w: 0.3, fill: "pump" });
+        if (arr !== "END") arrow(XS(y0) + 1.4, YS(zj), XS(Math.min(y0 + j.len, i.W - 0.3)), YS(zj + 0.4), "JET", 2.2, 0.35);
+        L(XS(y0), YS(zj), XS(y0), YS(i.H + 0.5), "AER", 0.4);
+        T(XS(y0) + 1.5, YS(i.H + 0.5) - 1, "ống hút khí / air intake", 2);
+        dimV(YS(zj), YS(0), XS(0) - 6, XS(0), `${f1(zj, 2)}`);
+      }
+    }
+    dimH(XS(0), XS(i.W), YS(-wall) + 5, YS(0), `${f1(i.W, 2)} m`);
+    dimV(YS(i.H), YS(0), XS(i.W + wall) + 18, XS(i.W), `${f1(i.H, 2)} m`);
+
+    // right column: equipment schedule, design data, notes
+    const RX = 252, RW = 156;
+    let ry = 14;
+    TB(RX, ry + 3, "BẢNG THIẾT BỊ (MỖI BỂ)", "EQUIPMENT SCHEDULE (PER TANK)", 3.2, { bold: true });
+    ry += 9;
+    const cols = [["Ký hiệu", "Tag", 16], ["Thiết bị", "Equipment", 70], ["SL", "Qty", 14], ["Thông số", "Rating", 56]];
+    const rows = [];
+    if (k === "FINE") {
+      const z = Ly.zone || [];
+      rows.push(["DF", [o.d.name, o.d.en], String(o.n), `${f1(o.qd, 2)} Nm³/h/đĩa · disc`]);
+      rows.push(["HD", ["Ống nhánh phân phối khí", "Air distribution headers"], String(z.reduce((s, q) => s + q.hdr * q.nGrid, 0)), `@ ${f1(z[0] ? z[0].hs : 0, 2)} m`]);
+      rows.push(["DP", ["Ống đứng cấp khí", "Air drop pipes"], String(Ly.drops.length), `${f1(o.air / Math.max(Ly.drops.length, 1), 0)} Nm³/h`]);
+    } else if (k === "COARSE") {
+      rows.push(["DC", [COARSE_D.name, COARSE_D.en], String(o.n), `${f1(o.qd, 2)} Nm³/h/bộ · unit`]);
+      rows.push(["DP", ["Ống cấp khí", "Air pipes"], String(Ly.drops.length), `${f1(o.air / Math.max(Ly.drops.length, 1), 0)} Nm³/h`]);
+    } else if (k === "SURFACE") rows.push(["SA", ["Máy khuấy bề mặt tốc độ chậm", "Low-speed surface aerator"], String(o.n), `${f1(o.unit, 1)} kW · SAE ${f1(m.sae, 1)}`]);
+    else { rows.push(["JA", ["Cụm vòi phun jet", "Jet nozzle cluster"], String(o.n), `${f1(o.unit, 1)} kW`]); rows.push(["P", ["Bơm tuần hoàn", "Recirculation pump"], String(o.n), `${f1(o.unit, 1)} kW`]); }
+    if (o.diffused) rows.push(["MB", ["Máy thổi khí (chung, làm việc + dự phòng)", "Blowers (common, duty + standby)"], `${o.duty}+1`, `${f1(o.air, 0)} Nm³/h · ${f1(o.bl.dp, 0)} mbar · ${f1(o.unit, 1)} kW`]);
+    let cx = RX;
+    L(RX, ry, RX + RW, ry, "TABLE", 0.25);
+    cols.forEach(([vi, en, w]) => { TB(cx + 0.8, ry + 3, vi, en, 1.9, { bold: true }); cx += w; });
+    const yTop = ry;
+    ry += 7.5; L(RX, ry, RX + RW, ry, "TABLE", 0.25);
+    for (const [tag, [vi, en], q, rate] of rows) {
+      cx = RX;
+      T(cx + 0.8, ry + 3.2, tag, 2.1, { bold: true }); cx += cols[0][2];
+      T(cx + 0.8, ry + 3.2, vi, 1.95); T(cx + 0.8, ry + 5.6, en, 1.45, { en: true }); cx += cols[1][2];
+      T(cx + 0.8, ry + 3.2, q, 2.1); cx += cols[2][2];
+      T(cx + 0.8, ry + 3.2, rate, 1.9);
+      ry += 7; L(RX, ry, RX + RW, ry, "TABLE", 0.13);
+    }
+    cx = RX; [...cols, ["", "", 0]].forEach(([, , w]) => { L(cx, yTop, cx, ry, "TABLE", 0.13); cx += w; });
+    ry += 6;
+    TB(RX, ry + 3, "THÔNG SỐ THIẾT KẾ", "DESIGN DATA", 3, { bold: true });
+    ry += 8;
+    const sum = [["Kích thước bể L × W × H", "Tank L × W × H", `${f1(i.L, 2)} × ${f1(i.W, 2)} × ${f1(i.H, 2)} m`],
+      ["Nhu cầu oxy SOR mỗi bể", "Oxygen demand SOR per tank", `${f1(R.SOR, 1)} kgO2/h`]];
+    if (o.diffused) sum.push(["Lưu lượng khí mỗi bể", "Air flow per tank", `${f1(o.air, 0)} Nm³/h`], ["SOTE tại độ ngập", "SOTE at submergence", `${f1(o.sote, 1)} %`]);
+    else sum.push(["Hiệu suất cấp khí SAE", "Standard aeration efficiency SAE", `${f1(m.sae, 1)} kgO2/kWh`]);
+    sum.push(["Công suất tiêu thụ mỗi bể", "Power draw per tank", `${f1(o.P, 1)} kW (${f1(o.Wm3, 1)} W/m³)`], ["Điện năng toàn trạm", "Plant energy", `${f1(o.kWh, 0)} kWh/ngày · d`]);
+    for (const [vi, en, val] of sum) { T(RX, ry + 3, vi, 2.2); T(RX + RW - 2, ry + 3, val, 2.2, { anchor: "end", bold: true }); T(RX, ry + 5.6, en, 1.55, { en: true }); ry += 6.2; }
+    ry += 2;
+    TB(RX, ry + 3, "GHI CHÚ", "NOTES", 3, { bold: true });
+    ry += 8;
+    const wrap = (s, maxW, h) => { const ws = String(s).split(" "), out = []; let c = ""; for (const w of ws) { const t2 = c ? c + " " + w : w; if (t2.length * h * 0.5 > maxW && c) { out.push(c); c = w; } else c = t2; } if (c) out.push(c); return out; };
+    [...NOTES[k], NOTE_END].forEach(([vi, en], n) => {
+      if (ry > TBy - 12) return;
+      for (const ln of wrap(`${n + 1}. ${vi}`, RW, 2.1)) { if (ry > TBy - 6) break; T(RX, ry + 2.5, ln, 2.1); ry += 2.9; }
+      for (const ln of wrap(en, RW, 1.5)) { if (ry > TBy - 4) break; T(RX + 3, ry + 2, ln, 1.5, { en: true }); ry += 2.2; }
+      ry += 1.2;
+    });
+    T(TBx + 2, TBy + 36, `Tỉ lệ / Scale: 1:${sP} (mặt bằng / plan), 1:${sS} (mặt cắt / section) · Khổ / Size A3`, 2.1);
+    T(332, TBy + 30, `Ngày / Date: ${meta.date || ""}`, 2.1);
+    T(332, TBy + 34, `Tờ / Sheet: ${meta.sheet || "1"} · PA / Opt. ${letter}${meta.chosen ? " (chọn / chosen)" : ""}`, 2.1);
+    T(332, TBy + 37.4, "Theo dữ liệu đĩa Xylem/Sanitaire, M&E 5th", 1.8); T(332, TBy + 39.3, "Per Xylem/Sanitaire diffuser data, M&E 5th", 1.4, { en: true });
+    return { prims: P, scale: { plan: sP, sect: sS }, w: 420, h: 297, letter, arrDef };
+  }
+
+  // ---------------- inputs ----------------
+  const GROUPS = [
+    ["Bể và chế độ vận hành", "Tank and operation", [
+      ["name", "Tên bể / hạng mục", "Tank / item name", "", "text"], ["nTanks", "Số bể giống nhau", "Number of identical tanks", "bể"],
+      ["L", "Chiều dài vùng sục khí", "Aerated length", "m"], ["W", "Chiều rộng bể", "Tank width", "m"],
+      ["H", "Mực nước cao nhất TWL", "Top water level TWL", "m"], ["Hmin", "Mực nước thấp nhất BWL", "Bottom water level BWL", "m"],
+      ["hours", "Thời gian sục khí mỗi bể", "Aeration time per tank", "h/ngày"], ["elec", "Giá điện", "Power tariff", "VND/kWh"]]],
+    ["Nhu cầu oxy", "Oxygen demand", [
+      ["aor", "AOR lớn nhất mỗi bể khi sục khí", "Peak AOR per tank while aerating", "kgO2/h"], ["ratio", "Tỉ số AOR/SOR", "AOR/SOR ratio", "-"],
+      ["sub", "Độ ngập trung bình của đĩa", "Average diffuser submergence", "m"], ["mix", "Khí khuấy trộn tối thiểu", "Minimum mixing air", "Nm³/h·m²"]]],
+    ["Thiết bị khuếch tán và máy thổi khí", "Diffusers and blowers", [
+      ["disc", "Loại đĩa bọt mịn", "Fine-bubble diffuser type", "", "disc"], ["qDisc", "Khí mỗi đĩa thiết kế", "Design air per disc", "Nm³/h"],
+      ["soteF", "SOTE đĩa theo độ ngập", "Disc SOTE per metre", "%/m"], ["hDiff", "Cao độ mặt đĩa so với đáy", "Disc height above floor", "m"],
+      ["dwp", "Tổn thất qua đĩa (DWP)", "Diffuser headloss (DWP)", "mbar"], ["pipe", "Tổn thất đường ống khí", "Air piping headloss", "mbar"],
+      ["eff", "Hiệu suất máy thổi", "Blower efficiency", "-"], ["Tair", "Nhiệt độ không khí lớn nhất", "Maximum air temperature", "°C"], ["alt", "Cao độ công trình", "Site altitude", "m"]]],
+  ];
+  function fieldHTML(k, vi, en, unit, kind) {
+    const id = "ae-" + k, v = st.inp[k];
+    let ctl;
+    if (kind === "disc") ctl = `<select id="${id}" data-k="${k}">` + Object.entries(TL().DIFFUSERS).map(([key, d]) => `<option value="${key}"${v === key ? " selected" : ""}>${A.esc(d.name)} · ${A.esc(DISC_EN[key] || "")}</option>`).join("") + `</select>`;
+    else if (kind === "text") ctl = `<input id="${id}" data-k="${k}" type="text" value="${A.esc(v || "")}">`;
+    else ctl = `<input id="${id}" data-k="${k}" type="number" step="any" inputmode="decimal" value="${v ?? ""}">`;
+    return `<div class="f${kind ? " wide" : ""}"><label for="${id}">${B(vi, en)}</label>${ctl}${unit && !kind ? `<span class="u">${A.esc(unit)}</span>` : ""}</div>`;
+  }
+  const inputsHTML = () => GROUPS.map(([gv, ge, fs]) => `<div class="card"><h3>${B(gv, ge)}</h3><div class="fields">${fs.map((f) => fieldHTML(...f)).join("")}</div></div>`).join("");
+  function barHTML() {
+    const d = A.design && A.design(true);
+    return `<div class="mxbar"><div class="btns">` +
+      (d ? `<button type="button" data-ae="design">${B("Lấy số liệu từ thiết kế ICEAS", "Take data from the ICEAS design")}</button>` : `<span class="hint" style="padding:0">${B("Hoàn thành bước 1–3 của thiết kế ICEAS để lấy số liệu tự động.", "Complete steps 1–3 of the ICEAS design to import the data.")}</span>`) +
+      `<button type="button" data-ae="reset">${B("Về số liệu mẫu", "Back to sample data")}</button></div></div>` +
+      `<div class="fields mxproj">${[["name", "Tên dự án", "Project name"], ["client", "Chủ đầu tư / khách hàng", "Client"], ["engineer", "Người lập", "Prepared by"], ["date", "Ngày", "Date"]].map(([k, vi, en]) =>
+        `<div class="f"><label for="aep-${k}">${B(vi, en)}</label><input id="aep-${k}" data-pk="${k}" type="text" value="${A.esc(st.project[k] || "")}"></div>`).join("")}</div>`;
+  }
+
+  // ---------------- results ----------------
+  const unitTxt = (o) => (o.diffused ? `${N(o.n, 0)} ${o.key === "FINE" ? "đĩa" : "bộ"}` : `${o.n} × ${N(o.unit, 1)} kW`);
+  const unitTxtE = (o) => (o.diffused ? `${E(o.n, 0)} ${o.key === "FINE" ? "discs" : "units"}` : `${o.n} × ${E(o.unit, 1)} kW`);
+  function resultsHTML() {
+    const R = calc(st.inp), ck = chosenKey(R), c = R.m[ck], i = R.i;
+    let h = `<div class="strip">` + [
+      [B("SOR mỗi bể", "SOR per tank"), N(R.SOR, 1), "kgO2/h"],
+      [B("Phương án chọn", "Chosen method"), B(c.m.vi.split(" (")[0], c.m.en), ""],
+      [B("Thiết bị mỗi bể", "Equipment per tank"), B(unitTxt(c), unitTxtE(c)), ""],
+      [B("Công suất mỗi bể", "Power per tank"), N(c.P, 1), "kW"],
+      [B("Điện năng toàn trạm", "Plant energy"), N(c.kWh, 0), "kWh/ngày"],
+    ].map(([a, v, u]) => `<div class="kpi"><div class="k">${a}</div><div class="v">${v}<small>${A.esc(u)}</small></div></div>`).join("") + `</div>`;
+    if (!c.ok) h += `<div class="warnbox has">${B("Phương án đang chọn không đạt một số kiểm tra – xem mục 2. Có thể chọn phương án khuyến cáo hoặc chỉnh số liệu.", "The chosen method fails some checks – see section 2. Pick the recommended method or adjust the data.")}</div>`;
+    // 1. comparison (click a column to choose)
+    const cols = METHODS.map((k) => R.m[k]);
+    const best = Math.min(...cols.map((o) => o.kWh));
+    const cell = (o, html) => `<td class="${o.ok ? "ok" : "bad"}${o.key === ck ? " sel" : ""}${o.key === R.rec ? " rec" : ""}" data-pickm="${o.key}">${html}</td>`;
+    const row = (vi, en, fn, unit) => `<tr><th style="text-align:left">${B(vi, en)}${unit ? ` <span class="u">(${A.esc(unit)})</span>` : ""}</th>${cols.map((o) => cell(o, fn(o))).join("")}</tr>`;
+    h += `<section class="sheet wide"><h2>${B("1. So sánh phương án cấp khí (bấm cột để chọn)", "1. Aeration method comparison (click a column to choose)")}</h2>` +
+      `<p class="hint" style="padding:6px 14px">${B("Cùng một nhu cầu oxy SOR. Ô xanh: đạt mọi kiểm tra; ô đỏ: có kiểm tra không đạt. Khuyến cáo: phương án đạt có điện năng thấp nhất.", "Same oxygen demand SOR for all. Green: passes all checks; red: a check fails. Recommendation: the passing method with the lowest energy.")}` +
+      (st.method ? ` <button type="button" data-ae="unpick">${B("Bỏ chọn – về khuyến cáo", "Clear choice – back to the recommendation")}</button>` : "") + `</p>` +
+      `<div class="tbl"><table class="mxm"><tr><th></th>${cols.map((o) => `<th>${B(o.m.vi.split(" (")[0], o.m.en)}</th>`).join("")}</tr>` +
+      row("Thiết bị mỗi bể", "Equipment per tank", (o) => B(unitTxt(o), unitTxtE(o))) +
+      row("Lưu lượng khí / SAE", "Air flow / SAE", (o) => (o.diffused ? `${N(o.air, 0)} Nm³/h` : `SAE ${N(o.m.sae, 1)} kgO2/kWh`)) +
+      row("SOTE tại độ ngập", "SOTE at submergence", (o) => (o.diffused ? `${N(o.sote, 1)} %` : "–")) +
+      row("Công suất tiêu thụ mỗi bể", "Power draw per tank", (o) => `<b>${N(o.P, 1)}</b>`, "kW") +
+      row("Công suất lắp đặt mỗi bể", "Installed power per tank", (o) => (o.diffused ? `${N(o.unit, 1)} × ${o.duty}+1` : N(o.Pinst, 1)), "kW") +
+      row("Suất công suất", "Specific power", (o) => N(o.Wm3, 1), "W/m³") +
+      row("Điện năng toàn trạm", "Plant energy", (o) => `<b>${N(o.kWh, 0)}</b>`, "kWh/ngày") +
+      row("Chi phí điện (triệu VND/ngày)", "Power cost (million VND/d)", (o) => N(o.cost / 1e6, 2)) +
+      row("Ưu điểm", "Pros", (o) => B(o.m.pros, o.m.prosEn)) + row("Nhược điểm", "Cons", (o) => B(o.m.cons, o.m.consEn)) +
+      `<tr><th></th>${cols.map((o) => `<td>${o.key === R.rec ? `<span class="tag">${B("khuyến cáo", "recommended")}</span>` : ""}${o.key === ck ? `<span class="pill ok">${B("đã chọn", "chosen")}</span>` : `<button type="button" data-pickm="${o.key}">${B("Chọn", "Choose")}</button>`}</td>`).join("")}</tr>` +
+      `</table></div>` +
+      `<div class="aero-chart" style="padding:10px 14px 14px"><h3>${B("Điện năng tiêu thụ – phương án thấp nhất = 100 %", "Energy use – lowest method = 100 %")}</h3>` +
+      cols.map((o) => { const pct = o.kWh / best * 100, w = Math.min(100, best / o.kWh * 100);
+        return `<div class="aero-bar"><div class="name">${B(o.m.vi.split(" (")[0], o.m.en)}</div><div class="track"><div class="fill${o.kWh === best ? " best" : ""}" style="width:${w.toFixed(1)}%"></div></div>` +
+          `<div class="label">${N(o.kWh, 0)} kWh</div><div class="unit">${N(pct, 0)} %</div></div>`; }).join("") + `</div></section>`;
+    // 2. checks of the chosen method
+    h += `<section class="sheet wide"><h2>${B(`2. Kiểm tra phương án ${c.m.vi.split(" (")[0].toLowerCase()}`, `2. Checks – ${c.m.en}`)}</h2><div class="tbl"><table class="chk"><tbody>` +
+      c.chk.map(([vi, en, v, ve, ok]) => `<tr><td>${B(vi, en)}</td><td class="n">${B(v, ve)}</td><td>${ok === true ? `<span class="pill ok">${B("Đạt", "Pass")}</span>` : ok === false ? `<span class="pill bad">${B("Không đạt", "Fail")}</span>` : `<span class="pill ref">${B("Lưu ý", "Note")}</span>`}</td></tr>`).join("") +
+      `<tr><td>${B("Yếu tố khống chế", "Governing factor")}</td><td class="n">${c.gov === "O2" ? B("nhu cầu oxy", "oxygen demand") : B("khuấy trộn", "mixing")}</td><td></td></tr></tbody></table></div></section>`;
+    // 3. calculation of the chosen method
+    const calcRows = [["Diện tích sục khí mỗi bể", "Aerated area per tank", N(R.AREA, 1), "m²"], ["Thể tích nước mỗi bể", "Water volume per tank", N(R.V, 0), "m³"], ["SOR = AOR ÷ (AOR/SOR)", "SOR = AOR ÷ (AOR/SOR)", N(R.SOR, 2), "kgO2/h"]];
+    if (c.diffused) calcRows.push(["Khí theo nhu cầu oxy = SOR ÷ (SOTE · 0,299)", "Air for oxygen = SOR ÷ (SOTE · 0.299)", N(c.airO2, 0), "Nm³/h"], ["Khí khuấy trộn = q_mix · A", "Mixing air = q_mix · A", N(c.airMix, 0), "Nm³/h"],
+      ["Số thiết bị khuếch tán", "Number of diffusers", N(c.n, 0), ""], ["Áp suất máy thổi", "Blower pressure", N(c.bl.dp, 0), "mbar"], ["Công suất trục máy thổi", "Blower shaft power", N(c.P, 1), "kW"], ["Động cơ chọn", "Motor selected", N(c.unit, 1), "kW"]);
+    else calcRows.push(["Công suất theo oxy = SOR ÷ SAE", "Power for oxygen = SOR ÷ SAE", N(c.PO2, 1), "kW"], ["Công suất khuấy trộn = W/m³ · V", "Mixing power = W/m³ · V", N(c.Pmix, 1), "kW"], ["Số máy × công suất định mức", "Units × rated power", `${c.n} × ${N(c.unit, 1)}`, "kW"]);
+    h += `<section class="sheet wide"><h2>${B("3. Tính toán phương án chọn", "3. Calculation of the chosen method")}</h2><div class="tbl"><table class="chk"><tbody>` +
+      calcRows.map(([vi, en, v, u]) => `<tr><td>${B(vi, en)}</td><td class="n">${v}</td><td class="u">${A.esc(u)}</td></tr>`).join("") + `</tbody></table></div></section>`;
+    // 4. drawings: every arrangement of the viewed method; the chosen one is printed with the report
+    const vk = st.view && R.m[st.view] ? st.view : ck, va = arrOf(vk);
+    h += `<section class="sheet wide"><h2>${B("4. Bản vẽ bố trí sơ bộ (A3)", "4. Preliminary layout drawing (A3)")}</h2>` +
+      `<div class="btns no-print" style="padding:8px 14px"><button type="button" class="primary" data-ae="pdf">${B("Xuất bản vẽ PDF", "Export drawing PDF")}</button>` +
+      `<button type="button" data-ae="dxf">${B("Xuất bản vẽ AutoCAD (DXF)", "Export AutoCAD drawing (DXF)")}</button>` +
+      `<button type="button" data-ae="xlsx">${B("Xuất tính toán Excel", "Export Excel calculation")}</button>` +
+      `<button type="button" data-ae="doc">${B("Xuất báo cáo Word", "Export Word report")}</button>` +
+      `<label class="mxall"><input type="checkbox" id="aeAll"${st.allDraw ? " checked" : ""}> ${B("Xuất bản vẽ mọi phương án", "Export drawings of all options")}</label></div>` +
+      `<div class="techbar" style="margin:0 14px 6px"><span class="lab">${B("Xem bản vẽ phương án", "Show drawings of")}</span>` +
+      METHODS.map((k) => `<button type="button" data-aeview="${k}" class="${k === vk ? "on" : ""}">${B(R.m[k].m.vi.split(" (")[0], R.m[k].m.en)}</button>`).join("") + `</div>` +
+      `<p class="hint" style="padding:0 14px">${B(`${ARR[vk].length} phương án bố trí. Bấm “Chọn bản vẽ này” để chọn phương án cấp khí và cách bố trí; bản vẽ được chọn được in ra cùng báo cáo (PDF, DXF, Excel, Word).`, `${ARR[vk].length} arrangement options. Press “Use this drawing” to choose the method and arrangement; the chosen drawing is printed with the report (PDF, DXF, Excel, Word).`)}</p>` +
+      ARR[vk].map(([ak, vi, en], n) => {
+        const on = vk === ck && ak === arrOf(ck), letter = String.fromCharCode(65 + n);
+        const sh = sheet(R, vk, ak, metaFor(on));
+        return `<div class="mxopt${on ? " on" : ""}"><div class="mxopth"><b>${B(`Phương án bố trí ${letter}: ${vi}`, `Arrangement ${letter}: ${en}`)}</b>` +
+          (on ? `<span class="pill ok">${B("đã chọn – in cùng báo cáo", "chosen – printed with the report")}</span>`
+            : `<button type="button" class="primary" data-aearr="${vk}:${ak}">${B("Chọn bản vẽ này", "Use this drawing")}</button>`) + `</div>` +
+          `<div class="mxsheet">${DR().toSVG(sh, { attrs: `width="100%" role="img" aria-label="Bản vẽ bố trí cấp khí – ${A.esc(R.m[vk].m.en)} – ${letter}"` })}</div></div>`;
+      }).join("") + `</section>`;
+    // 5. notes
+    h += `<section class="sheet wide"><h2>${B("5. Khuyến cáo bố trí và vận hành", "5. Layout and operation recommendations")}</h2><div style="padding:8px 14px"><ol>${[...NOTES[ck], NOTE_END].map(([vi, en]) => `<li>${B(vi, en)}</li>`).join("")}</ol></div></section>`;
+    return h;
+  }
+  const metaFor = (chosen, sheetNo) => ({ project: st.project.name || "", date: st.project.date || "", sheet: sheetNo || "1", chosen });
+
+  function view(el) {
+    if (!st) load();
+    if (st.fresh) { const d = A.design && A.design(true); if (d) Object.assign(st.inp, d); st.fresh = false; save(); }
+    el.innerHTML = `<section class="panel"><div class="eyebrow">${B("Công cụ thiết kế cấp khí", "Aeration design tool")}</div>` +
+      `<h2>${B("Thiết kế hệ thống cấp khí – so sánh phương án và bản vẽ bố trí", "Aeration system design – method comparison and layout drawings")}</h2>` +
+      `<p class="lead">${B("Bốn phương án cấp khí (khí bọt mịn, khí bọt thô, khuấy bề mặt, sục khí dạng jet) được tính cho cùng nhu cầu oxy: số thiết bị, công suất, điện năng và kiểm tra. Mỗi phương án có nhiều cách bố trí, mỗi cách một bản vẽ A3; bản vẽ được chọn là bản in cùng báo cáo. Số liệu có thể lấy từ thiết kế ICEAS.",
+        "Four aeration methods (fine bubble, coarse bubble, surface aerators, jet aeration) are sized for the same oxygen demand: equipment, power, energy and checks. Each method has several arrangements, each with an A3 drawing; the chosen drawing is printed with the report. Data can be imported from the ICEAS design.")}</p>` +
+      barHTML() + `<div class="cards" id="aeIn">${inputsHTML()}</div><div id="aeOut">${resultsHTML()}</div></section>`;
+    A.biPass(el);
+    bind(el);
+  }
+  function refreshOut(el) { const o = el.querySelector("#aeOut"); o.innerHTML = resultsHTML(); A.biPass(o); }
+
+  function bind(el) {
+    el.oninput = (ev) => {
+      const k = ev.target.dataset.k, pk = ev.target.dataset.pk;
+      if (pk) { st.project[pk] = ev.target.value; save(); return; }
+      if (!k || ev.target.tagName === "SELECT") return;
+      if (ev.target.type === "number") { const v = parseFloat(ev.target.value); if (!isFinite(v)) return; st.inp[k] = v; } else { st.inp[k] = ev.target.value; if (k === "name") st.inp.nameEn = ""; }
+      save(); clearTimeout(bind._t); bind._t = setTimeout(() => refreshOut(el), 300);
+    };
+    el.onchange = (ev) => {
+      if (ev.target.id === "aeAll") { st.allDraw = ev.target.checked; save(); return; }
+      const k = ev.target.dataset.k;
+      if (k && ev.target.tagName === "SELECT") { st.inp[k] = ev.target.value; if (k === "disc") { const d = TL().DIFFUSERS[st.inp.disc]; st.inp.qDisc = d.qRef; st.inp.soteF = d.sote; } save(); view(el); }
+    };
+    el.onclick = async (ev) => {
+      const pm = ev.target.closest("[data-pickm]");
+      if (pm) { st.method = pm.dataset.pickm; st.view = st.method; save(); refreshOut(el); return A.toast("Đã chọn phương án: " + AER_METHODS[st.method].vi, "Method chosen: " + AER_METHODS[st.method].en); }
+      const vw = ev.target.closest("[data-aeview]");
+      if (vw) { st.view = vw.dataset.aeview; save(); refreshOut(el); const s = el.querySelector(".mxopt"); if (s) s.scrollIntoView({ behavior: "smooth", block: "start" }); return; }
+      const ar = ev.target.closest("[data-aearr]");
+      if (ar) { const [k, a] = ar.dataset.aearr.split(":"); st.method = k; st.view = k; st.arr[k] = a; save(); refreshOut(el); const o = el.querySelector(".mxopt.on"); if (o) o.scrollIntoView({ behavior: "smooth", block: "start" });
+        return A.toast("Đã chọn bản vẽ – bản vẽ này sẽ in cùng báo cáo", "Drawing chosen – it is printed with the report"); }
+      const b = ev.target.closest("[data-ae]");
+      if (!b) return;
+      const act = b.dataset.ae;
+      if (act === "unpick") { st.method = ""; st.view = ""; save(); return refreshOut(el); }
+      if (act === "design") { const d = A.design && A.design(); if (!d) return; Object.assign(st.inp, d); save(); view(el); return A.toast("Đã lấy số liệu từ thiết kế ICEAS", "Data imported from the ICEAS design"); }
+      if (act === "reset") { st.inp = Object.assign({}, DEF); save(); view(el); return A.toast("Đã về số liệu mẫu", "Sample data restored"); }
+      try {
+        b.disabled = true;
+        if (act === "pdf") await exportPDF();
+        if (act === "dxf") await exportDXF();
+        if (act === "xlsx") await exportXLSX();
+        if (act === "doc") await exportDOC();
+      } catch (e) { A.toast("Không xuất được file: " + e.message, "Export failed: " + e.message); }
+      finally { b.disabled = false; }
+    };
+  }
+
+  // ---------------- exports ----------------
+  const fname = (ext) => "CapKhi_" + (st.project.name || "du-an").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/đ/g, "d").replace(/Đ/g, "D").replace(/[^\w-]+/g, "_").slice(0, 50) + "." + ext;
+  // chosen drawing first; with "all options" every arrangement of every method follows
+  function sheetList() {
+    const R = calc(st.inp), ck = chosenKey(R), ca = arrOf(ck), out = [{ k: ck, a: ca, chosen: true }];
+    if (st.allDraw) for (const k of METHODS) for (const [a] of ARR[k]) if (!(k === ck && a === ca)) out.push({ k, a, chosen: false });
+    return out.map((x, n) => Object.assign(x, { sh: sheet(R, x.k, x.a, metaFor(x.chosen, String(n + 1))) }));
+  }
+  async function exportDXF() {
+    const ss = sheetList();
+    const txt = DR().toDXF(ss.map((x) => Object.assign({}, x.sh, { unit: x.sh.scale.plan })), "AER_");
+    await A.saveBlob(fname("dxf"), new Blob([txt], { type: "application/dxf" }), "Đã xuất bản vẽ DXF (mặt bằng đúng kích thước thật, mm)", "DXF exported (plan at true size, mm)");
+  }
+  function svgPng(sh, w = 3300) {
+    return new Promise((ok, bad) => {
+      const svg = DR().toSVG(sh, { attrs: `width="${w}" height="${Math.round(w * sh.h / sh.w)}"` });
+      const img = new Image();
+      img.onload = () => { const c = document.createElement("canvas"); c.width = w; c.height = Math.round(w * sh.h / sh.w);
+        const x = c.getContext("2d"); x.fillStyle = "#fff"; x.fillRect(0, 0, c.width, c.height); x.drawImage(img, 0, 0, c.width, c.height); ok(c.toDataURL("image/png")); };
+      img.onerror = () => bad(new Error("SVG render"));
+      img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
+    });
+  }
+  async function exportPDF() {
+    const J = root.jspdf && root.jspdf.jsPDF;
+    if (!J) return A.toast("Chưa tải được thư viện PDF – kiểm tra kết nối mạng", "PDF library not loaded – check the connection");
+    const ss = sheetList(), doc = new J({ orientation: "landscape", unit: "mm", format: "a3" });
+    for (let n = 0; n < ss.length; n++) { if (n) doc.addPage("a3", "landscape"); doc.addImage(await svgPng(ss[n].sh), "PNG", 0, 0, 420, 297, undefined, "FAST"); }
+    await A.saveBlob(fname("pdf"), doc.output("blob"), "Đã xuất bản vẽ PDF", "Drawing PDF exported");
+  }
+  async function exportXLSX() {
+    const X = root.ExcelJS;
+    if (!X) return A.toast("Chưa tải được thư viện Excel – kiểm tra kết nối mạng", "Excel library not loaded – check the connection");
+    const R = calc(st.inp), ck = chosenKey(R), i = R.i;
+    const wb = new X.Workbook(); wb.creator = "ICEAS Design Studio"; wb.created = new Date();
+    const hd = (ws, r) => ws.getRow(r).eachCell((c) => { c.font = { bold: true }; c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE1EFF4" } }; });
+    // input sheet: named cells so the comparison sheet keeps live formulas
+    const wi = wb.addWorksheet("So lieu");
+    wi.columns = [{ width: 46 }, { width: 14 }, { width: 14 }];
+    wi.addRow(["Số liệu đầu vào · Input data", "Giá trị · Value", "Đơn vị · Unit"]); hd(wi, 1);
+    const ref = {};
+    for (const [, , fs] of GROUPS) for (const [k, vi, en, unit, kind] of fs) { if (kind === "text") continue; const r = wi.addRow([`${vi} · ${en}`, kind === "disc" ? i[k] : +i[k], unit]); ref[k] = `'So lieu'!$B$${r.number}`; }
+    const ws = wb.addWorksheet("So sanh");
+    ws.columns = [{ width: 44 }, ...METHODS.map(() => ({ width: 22 }))];
+    ws.addRow([`So sánh phương án cấp khí · Aeration method comparison – ${st.project.name || ""}`]); ws.getCell("A1").font = { bold: true, size: 13 };
+    ws.addRow(["Hạng mục · Item", ...METHODS.map((k) => `${AER_METHODS[k].vi} · ${AER_METHODS[k].en}`)]); hd(ws, 2);
+    const col = (n) => String.fromCharCode(66 + n);
+    const rP = ws.addRow(["Công suất tiêu thụ mỗi bể (kW) · Power per tank", ...METHODS.map((k) => +R.m[k].P.toFixed(2))]).number;
+    ws.addRow(["Thiết bị mỗi bể · Equipment per tank", ...METHODS.map((k) => `${unitTxt(R.m[k])} · ${unitTxtE(R.m[k])}`)]);
+    ws.addRow(["Lưu lượng khí (Nm³/h) · Air flow", ...METHODS.map((k) => (R.m[k].diffused ? +R.m[k].air.toFixed(0) : "–"))]);
+    const rE = ws.addRow(["Điện năng toàn trạm (kWh/ngày) · Plant energy (kWh/d)", ...METHODS.map((k, n) => ({ formula: `${col(n)}${rP}*${ref.hours}*${ref.nTanks}`, result: +R.m[k].kWh.toFixed(1) }))]).number;
+    ws.addRow(["Chi phí điện (VND/ngày) · Power cost (VND/d)", ...METHODS.map((k, n) => ({ formula: `${col(n)}${rE}*${ref.elec}`, result: Math.round(R.m[k].cost) }))]);
+    ws.addRow(["Đạt mọi kiểm tra · Passes all checks", ...METHODS.map((k) => (R.m[k].ok ? "Đạt · Pass" : "Không đạt · Fail"))]);
+    ws.addRow(["Ưu điểm · Pros", ...METHODS.map((k) => `${AER_METHODS[k].pros} · ${AER_METHODS[k].prosEn}`)]);
+    ws.addRow(["Nhược điểm · Cons", ...METHODS.map((k) => `${AER_METHODS[k].cons} · ${AER_METHODS[k].consEn}`)]);
+    ws.addRow([]);
+    const sh = sheet(R, ck, arrOf(ck), metaFor(true));
+    ws.addRow(["Phương án chọn · Chosen", `${AER_METHODS[ck].vi} · ${AER_METHODS[ck].en}`]).font = { bold: true };
+    ws.addRow(["Bản vẽ bố trí · Arrangement", `${sh.letter}: ${sh.arrDef[1]} · ${sh.arrDef[2]}`]);
+    for (let r = 2; r <= ws.rowCount; r++) ws.getRow(r).alignment = { wrapText: true, vertical: "top" };
+    await A.saveBlob(fname("xlsx"), new Blob([await wb.xlsx.writeBuffer()], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }), "Đã xuất file Excel cấp khí", "Aeration Excel exported");
+  }
+  async function exportDOC() {
+    const R = calc(st.inp), ck = chosenKey(R), c = R.m[ck], i = R.i;
+    const bi = (vi, en) => `${A.esc(vi)}${en ? `<br><span class="en">${A.esc(en)}</span>` : ""}`;
+    let html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8"><title>Aeration</title>` +
+      `<style>@page WordSection1{size:595.3pt 841.9pt;margin:56pt 50pt 56pt 56pt}div.WordSection1{page:WordSection1}@page WordSection2{size:841.9pt 595.3pt;mso-page-orientation:landscape;margin:28pt}div.WordSection2{page:WordSection2}` +
+      `body{font-family:Arial,sans-serif;font-size:10pt}h1{font-size:16pt;color:#0f6e8c}h2{font-size:12.5pt;color:#0f6e8c;margin-top:14pt}table{border-collapse:collapse;width:100%}td,th{border:1px solid #b0b8be;padding:3pt 5pt;vertical-align:top;font-size:9.5pt}th{background:#e1eff4}.en{color:#666;font-size:8pt;font-style:italic}.n{text-align:right}.sel{background:#eef7ee}</style></head><body><div class="WordSection1">`;
+    html += `<h1>${bi("BÁO CÁO THIẾT KẾ HỆ THỐNG CẤP KHÍ", "AERATION SYSTEM DESIGN REPORT")}</h1><table>` +
+      [["Dự án", "Project", st.project.name], ["Chủ đầu tư", "Client", st.project.client], ["Người lập", "Prepared by", st.project.engineer], ["Ngày", "Date", st.project.date], ["Hạng mục", "Item", i.name]].map(([vi, en, v]) => `<tr><td>${bi(vi, en)}</td><td>${A.esc(v || "")}</td></tr>`).join("") + `</table>`;
+    html += `<h2>${bi("1. Số liệu đầu vào", "1. Input data")}</h2><table>` + GROUPS.flatMap(([, , fs]) => fs).filter((f) => f[4] !== "text").map(([k, vi, en, unit, kind]) =>
+      `<tr><td>${bi(vi, en)}</td><td class="n">${kind === "disc" ? bi(TL().DIFFUSERS[i[k]].name, DISC_EN[i[k]]) : A.fmtN(i[k], 2)}</td><td>${A.esc(unit)}</td></tr>`).join("") + `</table>`;
+    html += `<h2>${bi("2. So sánh phương án cấp khí", "2. Aeration method comparison")}</h2><table><tr><th></th>${METHODS.map((k) => `<th>${bi(AER_METHODS[k].vi, AER_METHODS[k].en)}</th>`).join("")}</tr>` +
+      [["Thiết bị mỗi bể", "Equipment per tank", (o) => bi(unitTxt(o), unitTxtE(o))], ["Công suất mỗi bể (kW)", "Power per tank (kW)", (o) => A.fmtN(o.P, 1)], ["Điện năng (kWh/ngày)", "Energy (kWh/d)", (o) => A.fmtN(o.kWh, 0)],
+        ["Chi phí điện (triệu VND/ngày)", "Power cost (million VND/d)", (o) => A.fmtN(o.cost / 1e6, 2)], ["Kiểm tra", "Checks", (o) => (o.ok ? "Đạt / Pass" : "Không đạt / Fail")], ["Ưu điểm", "Pros", (o) => bi(o.m.pros, o.m.prosEn)], ["Nhược điểm", "Cons", (o) => bi(o.m.cons, o.m.consEn)]]
+        .map(([vi, en, fn]) => `<tr><td>${bi(vi, en)}</td>${METHODS.map((k) => `<td class="${k === ck ? "sel" : ""}">${fn(R.m[k])}</td>`).join("")}</tr>`).join("") + `</table>`;
+    html += `<h2>${bi("3. Phương án chọn: " + c.m.vi, "3. Chosen method: " + c.m.en)}</h2><table>` +
+      c.chk.map(([vi, en, v, ve, ok]) => `<tr><td>${bi(vi, en)}</td><td class="n">${bi(v, ve)}</td><td>${ok === true ? "Đạt / Pass" : ok === false ? "Không đạt / Fail" : "Lưu ý / Note"}</td></tr>`).join("") + `</table>`;
+    html += `<h2>${bi("4. Khuyến cáo", "4. Recommendations")}</h2><ol>` + [...NOTES[ck], NOTE_END].map(([vi, en]) => `<li>${bi(vi, en)}</li>`).join("") + `</ol></div>`;
+    const parts = [], ss = sheetList();
+    for (let n = 0; n < ss.length; n++) {
+      parts.push({ name: `drawing${n + 1}.png`, data: (await svgPng(ss[n].sh, 2400)).split(",")[1] });
+      html += `<br clear="all" style="page-break-before:always;mso-break-type:section-break"><div class="WordSection2"><img src="file:///C:/aer/drawing${n + 1}.png" width="1060" height="749"></div>`;
+    }
+    html += `</body></html>`;
+    const b64 = (s) => { const by = new TextEncoder().encode(s); let bin = ""; for (let j = 0; j < by.length; j += 0x8000) bin += String.fromCharCode.apply(null, by.subarray(j, j + 0x8000)); return btoa(bin); };
+    const wrap76 = (s) => s.replace(/.{1,76}/g, "$&\r\n"), bd = "----=_NextPart_ICEAS_AER";
+    let mht = `MIME-Version: 1.0\r\nContent-Type: multipart/related; boundary="${bd}"; type="text/html"\r\n\r\n--${bd}\r\nContent-Type: text/html; charset="utf-8"\r\nContent-Transfer-Encoding: base64\r\nContent-Location: file:///C:/aer/report.htm\r\n\r\n${wrap76(b64(html))}\r\n`;
+    for (const pt of parts) mht += `--${bd}\r\nContent-Type: image/png\r\nContent-Transfer-Encoding: base64\r\nContent-Location: file:///C:/aer/${pt.name}\r\n\r\n${wrap76(pt.data)}\r\n`;
+    mht += `--${bd}--\r\n`;
+    await A.saveBlob(fname("doc"), new Blob([mht], { type: "application/msword" }), "Đã xuất báo cáo Word", "Word report exported");
+  }
+
+  root.AERUI = { init(api) { A = api; }, view, load, calc, sheet, get state() { return st; } };
+})(window);
+
+</script>
+<script>
 (function () {
   const E = window.ICEAS;
   const CT = window.CTUI;
@@ -11833,7 +12458,7 @@ const AER_METHODS = {
     }
     document.getElementById("stepper").hidden = mode !== "design";
     if (mode === "tools") { header(null); document.getElementById("subtitle").innerHTML = bi("Công cụ tính riêng: sục khí, lưới đĩa, máy thổi khí, máng thu, phèn, thể tích phễu"); toolsView(); return; }
-    if (mode === "aer") { header(null); document.getElementById("subtitle").innerHTML = bi("Cấp khí / Aeration: so sánh phương án, bản vẽ bố trí, xuất báo cáo"); aerView(); return; }
+    if (mode === "aer") { header(null); document.getElementById("subtitle").innerHTML = bi("Cấp khí: so sánh 4 phương án, bản vẽ bố trí A3 cho từng phương án, báo cáo PDF/DXF/Excel/Word", "Aeration: 4 methods compared, A3 layout drawing per option, PDF/DXF/Excel/Word reports"); window.AERUI.view(document.getElementById("view")); return; }
     if (mode === "mc5") { header(validate(1).e.length ? null : compute()); mc5View(); return; }
     if (mode === "cf") { header(validate(1).e.length ? null : compute()); cfView(); return; }
     const s = STEPS_()[step];
@@ -13029,7 +13654,8 @@ const AER_METHODS = {
     else if (t.tagName === "SELECT" || t.type === "text") state[key] = t.value;
     else { const v = parseFloat(t.value); state[key] = isFinite(v) ? v : null; }
     if (key === "kin" && state.kin === "CUSTOM") for (const k of KIN_KEYS) state[k] = E.KINETICS.XYLEM[k];
-    if (key === "aerMethod") { const m = AER_METHODS[t.value]; Object.assign(state, { alpha: m.alpha, beta: m.beta, sotePerM: m.sotePerM, qDiffMax: m.qDiffMax, aDiff: m.aDiff, mixSBR: m.mixSBR }); }
+    // surface / jet aeration have no diffuser data (null) – keep the current diffuser inputs then
+    if (key === "aerMethod") { const m = AER_METHODS[t.value]; for (const k of ["alpha", "beta", "sotePerM", "qDiffMax", "aDiff", "mixSBR"]) if (m[k] !== null && m[k] !== undefined) state[k] = m[k]; }
     // editing a step invalidates the steps after it
     const s = STEP_OF[key] ?? step;
     for (let i = s + 1; i < done.length; i++) done[i] = false;
@@ -13234,6 +13860,19 @@ const AER_METHODS = {
       nTanks: p.N, ts: +(r.proc.mlssBWL / 10000).toFixed(2), aer: true, hours: +(hrs || 8).toFixed(1), pretreat: "FINE", temp: p.Tmax };
   }
   window.MIXUI.init({ bi, en, fmtN, esc, toast, saveBlob, iceas: iceasTank, biPass });
+  // ICEAS basin for the aeration tool: aerated react zone, AOR per tank while aerating, aeration hours, diffuser data of the design
+  function aerDesign(quiet) {
+    if (validate(1).e.length || isCT()) { if (!quiet) toast(isCT() ? "Lấy số liệu cấp khí từ ICEAS – hãy chuyển sang ICEAS" : "Chưa hoàn thành thiết kế ICEAS", isCT() ? "Aeration data come from ICEAS – switch to ICEAS" : "The ICEAS design is not complete"); return null; }
+    try {
+      const res = compute(), p = res.p, r = res.r, batch = p.fill === "BATCH";
+      const disc = Object.entries(window.TOOLS.DIFFUSERS).find(([, d]) => Math.abs(d.Ad - p.aDiff) < 0.005);
+      return { name: `${state.name || "ICEAS"} – vùng phản ứng`, nameEn: `${state.name || "ICEAS"} – react zone`, nTanks: p.N, L: +(batch ? r.dim.L : r.dim.L - p.Lpre - p.wall).toFixed(2), W: +r.dim.W.toFixed(2),
+        H: +r.dep.mad.toFixed(2), Hmin: +r.dim.BWL.toFixed(2), aor: +r.aor.maxH.toFixed(2), ratio: +r.aer.ratio.toFixed(3), sub: +r.aer.sub.toFixed(2),
+        mix: p.mixSBR, hours: +r.cyc.aerH.toFixed(1), disc: disc ? disc[0] : "D9", qDisc: p.qDiffMax, soteF: p.sotePerM, hDiff: p.hDiff,
+        dwp: p.dwp, pipe: p.mainHL, eff: p.effBlower, alt: p.alt, Tair: p.TairMax };
+    } catch (e) { return null; }
+  }
+  window.AERUI.init({ bi, en, fmtN, esc, toast, saveBlob, biPass, design: aerDesign });
 
   async function exportXlsx() {
     if (!window.ExcelJS) { toast("Chưa tải được thư viện Excel – kiểm tra kết nối mạng"); return; }
