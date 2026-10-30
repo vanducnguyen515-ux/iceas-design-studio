@@ -12811,7 +12811,7 @@ const AER_METHODS = {
   function toolsView() {
     const v = document.getElementById("view");
     v.innerHTML = `<section class="panel"><div class="eyebrow">Công cụ thiết kế</div><h2>Các công cụ tính riêng</h2>` +
-      `<p class="lead">Mỗi công cụ tính độc lập. Bấm "Lấy từ thiết kế" để điền số liệu từ phương án đang làm.</p><div class="cards" id="toolCards">` +
+      `<p class="lead">Mỗi công cụ tính độc lập. Bấm "Lấy từ thiết kế" để điền số liệu từ phương án đang làm.</p><div class="aero-tools-view"><div class="cards" id="toolCards">` +
       TOOL_DEFS.map((t) => {
         const vals = Object.assign(toolDefaults(t), toolVals[t.id] || {});
         const fields = t.f.map(([k, lab, unit, type]) => {
@@ -12833,7 +12833,7 @@ const AER_METHODS = {
         }).join("");
         return `<div class="card" data-tool="${t.id}"><h3>${t.t}</h3><div class="fields">${fields}</div><p class="hint">${t.d}</p>` +
           `<div class="btns" style="padding:0 14px 10px"><button type="button" data-fill="${t.id}">Lấy từ thiết kế</button></div><div class="tbl" id="out-${t.id}"></div></div>`;
-      }).join("") + `</div></section>`;
+      }).join("") + `</div></div></section>`;
     TOOL_DEFS.forEach(runTool);
     biPass(v);
   }
