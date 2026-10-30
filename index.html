@@ -11292,6 +11292,13 @@ const AER_METHODS = {
         o.chk.push(["Khí mỗi bộ khuếch tán trong dải làm việc", "Air per diffuser within the operating range",
           `${N(o.qd, 2)} Nm³/h (${N(d.qMin, 1)}–${N(d.qMax, 1)})`, `${E(o.qd, 2)} Nm³/h (${E(d.qMin, 1)}–${E(d.qMax, 1)})`, o.qd >= d.qMin && o.qd <= d.qMax]);
         if (fine) o.chk.push(["Mật độ phủ sàn At/Ad ≤ 20", "Floor coverage At/Ad ≤ 20", N(o.atad, 1), E(o.atad, 1), o.atad <= 20]);
+        if (fine) {
+          let fit = false;
+          for (let ng = 1; ng <= 6 && !fit; ng++) fit = TL().grid({ L: i.L, W: i.W, nGrid: ng, nDiff: o.n, clrEnd: 0.3, clrSide: 0.3, hdrMin: 0.6, discMin: 0.3 }).ok;
+          o.fit = fit;
+          o.chk.push(["Đủ chỗ bố trí đĩa trên sàn (ống nhánh ≥ 0,6 m, đĩa ≥ 0,3 m)", "Discs fit on the floor (headers ≥ 0.6 m, discs ≥ 0.3 m)",
+            fit ? "đủ" : "không đủ – tăng diện tích hoặc dùng đĩa lớn hơn", fit ? "fits" : "does not fit – enlarge the area or use larger diffusers", fit]);
+        }
         o.chk.push(["Khí cấp ≥ khí khuấy trộn tối thiểu", "Air supply ≥ minimum mixing air", `${N(o.air, 0)} ≥ ${N(o.airMix, 0)} Nm³/h`, `${E(o.air, 0)} ≥ ${E(o.airMix, 0)} Nm³/h`, null]);
       } else {
         o.diffused = false; o.sae = m.sae;
@@ -11344,21 +11351,33 @@ const AER_METHODS = {
       });
       Ly.r = (o.d.Ad / Math.PI) ** 0.5;                 // disc radius from active area
     } else if (k === "COARSE") {
-      const bands = arr === "SIDE2" ? [0.6, W - 0.6] : arr === "CENTER" ? [W / 2] : [0.6];
+      // each band starts 0.4 m from its wall and grows inward (centre band: grows both ways), always inside the tank
+      const c0 = 0.4, bands = arr === "SIDE2" ? [{ y0: c0, dir: 1, max: W / 2 - 0.6 }, { y0: W - c0, dir: -1, max: W / 2 - 0.6 }]
+        : arr === "CENTER" ? [{ y0: W / 2, dir: 0, max: Math.min(W - 2 * c0 - 1, W * 0.5) }] : [{ y0: c0, dir: 1, max: W * 0.55 }];
       const per = Math.ceil(o.n / bands.length), x0 = 0.5, x1 = L - 0.5;
-      const rows = Math.max(1, Math.ceil(per / Math.floor((x1 - x0) / 0.5 + 1)));
+      // rows at 0.5 m; when the band would be too wide, pack the units closer along the header (≥ 0.3 m), then the rows (≥ 0.3 m)
+      let dx = 0.5, rows = Math.max(1, Math.ceil(per / (Math.floor((x1 - x0) / dx) + 1)));
+      if ((rows - 1) * 0.5 > bands[0].max) { dx = 0.3; rows = Math.max(1, Math.ceil(per / (Math.floor((x1 - x0) / dx) + 1))); }
+      const dy = rows > 1 ? Math.max(Math.min(0.5, bands[0].max / (rows - 1)), 0.3) : 0.5;
+      Ly.rowSp = dy;
       let left = o.n;
-      bands.forEach((yb, bi) => {
+      bands.forEach((b) => {
         const nb = Math.min(left, per); left -= nb;
-        const perRow = Math.ceil(nb / rows);
+        const perRow = Math.ceil(nb / rows), ys = [];
         for (let r = 0; r < rows; r++) {
-          const y = yb + (r - (rows - 1) / 2) * 0.5 * (bands.length === 1 && yb < W / 2 ? 1 : 1);
+          const off = b.dir === 0 ? (r - (rows - 1) / 2) * dy : b.dir * r * dy;
+          const y = Math.min(Math.max(b.y0 + off, c0), W - c0);
           const nr = Math.min(perRow, nb - r * perRow); if (nr <= 0) break;
+          ys.push(y);
           Ly.lines.push({ x1: x0, y1: y, x2: x1, y2: y, kind: "hdr" });
           for (let j = 0; j < nr; j++) Ly.pts.push({ x: nr === 1 ? (x0 + x1) / 2 : x0 + j * (x1 - x0) / (nr - 1), y, bar: true });
         }
-        Ly.drops.push({ x: x0, y: yb });
-        Ly.rolls.push({ y: yb, dir: yb < W / 2 ? 1 : -1 });
+        const lo = Math.min(...ys), hi = Math.max(...ys);
+        if (ys.length > 1) Ly.lines.push({ x1: x0 - 0.15, y1: lo, x2: x0 - 0.15, y2: hi, kind: "man" });      // manifold joining the rows of the band
+        Ly.drops.push({ x: x0 - 0.15, y: b.dir === -1 ? hi : lo });
+        // roll arrow starts at the inner edge of the band and turns toward the open water
+        if (b.dir === 0) { Ly.rolls.push({ y: hi, dir: 1 }); Ly.rolls.push({ y: lo, dir: -1 }); }
+        else Ly.rolls.push({ y: b.dir === 1 ? hi : lo, dir: b.dir });
       });
     } else if (k === "SURFACE") {
       const n = o.n, D = Math.min(1.2 + o.unit / 25, W * 0.4);
@@ -11440,8 +11459,9 @@ const AER_METHODS = {
     if (k === "FINE") { const r = Math.max(Ly.r * k1, 0.45); for (const q of Ly.pts) C(X(q.x), Y(q.y), r, "MIXER", { w: 0.15, fill: "mixer" }); }
     if (k === "COARSE") for (const q of Ly.pts) Rect(X(q.x) - 0.5, Y(q.y) - 1.2, X(q.x) + 0.5, Y(q.y) + 1.2, "MIXER", { w: 0.15, fill: "mixer" });
     for (const r of Ly.rolls) {
-      const ya = r.y + r.dir * Math.min(i.W * 0.45, 4), x = i.L * 0.82;
-      arrow(X(x), Y(r.y + r.dir * 0.8), X(x), Y(ya), "FLOW", 2.2, 0.3);
+      const clampY = (y) => Math.min(Math.max(y, 0.3), i.W - 0.3);
+      const ys0 = clampY(r.y + r.dir * 0.5), ya = clampY(r.y + r.dir * Math.min(i.W * 0.45, 4)), x = i.L * 0.82;
+      if (Math.abs(ya - ys0) > 0.8) arrow(X(x), Y(ys0), X(x), Y(ya), "FLOW", 2.2, 0.3);
       T(X(x) + 1.5, (Y(r.y) + Y(ya)) / 2, "dòng cuộn / roll", 2, { layer: "FLOW" });
     }
     for (const u of Ly.units) {
@@ -11474,6 +11494,9 @@ const AER_METHODS = {
       L(xm, Y(Math.min(byc, ...ysD)), xm, Y(Math.max(byc, ...ysD)), "AER", 0.6);
       for (const d of Ly.drops) { L(xm, Y(d.y), X(d.x), Y(d.y), "AER", 0.45, "dashed"); C(X(d.x), Y(d.y), 0.9, "AER", { w: 0.35 }); }
     }
+    if (o.diffused && Ly.pts.length < o.n) {
+      TB(X(i.L / 2), Y(i.W / 2) - 2, `KHÔNG BỐ TRÍ ĐỦ ${o.n} THIẾT BỊ TRÊN SÀN – xem mục Kiểm tra`, `${o.n} UNITS DO NOT FIT ON THE FLOOR – see Checks`, 3, { anchor: "middle", bold: true, layer: "PROP" });
+    }
     dimH(X(0), X(i.L), Y(-wall) + (Ly.pump && arr !== "END" ? 13 : 7), Y(0), `${f1(i.L, 2)} m`);
     dimV(Y(i.W), Y(0), X(i.L + wall) + 7, X(i.L), `${f1(i.W, 2)} m`);
     if (k === "FINE" && Ly.zone && Ly.zone[0]) {
@@ -11499,7 +11522,7 @@ const AER_METHODS = {
       T(XS(dy) + 6.5, YS(i.H + 0.5) + 1, k === "FINE" ? "ống đứng / drop pipe" : "ống cấp khí / air pipe", 2);
       dimV(YS(i.hDiff), YS(0), XS(0) - 6, XS(0), `${f1(i.hDiff, 2)}`);
       dimV(YS(i.H), YS(i.hDiff), XS(0) - 12, XS(0), `${f1(i.H - i.hDiff, 2)}`);
-      for (const r of Ly.rolls) { const yc = r.y + r.dir * Math.min(i.W * 0.3, 3); arrow(XS(r.y), YS(i.H * 0.7), XS(yc), YS(i.H * 0.88), "FLOW", 2, 0.3); }
+      for (const r of Ly.rolls) { const yc = Math.min(Math.max(r.y + r.dir * Math.min(i.W * 0.3, 3), 0.3), i.W - 0.3); if (Math.abs(yc - r.y) > 0.5) arrow(XS(r.y), YS(i.H * 0.7), XS(yc), YS(i.H * 0.88), "FLOW", 2, 0.3); }
     } else if (k === "SURFACE") {
       const u = Ly.units[0];
       if (u) {
